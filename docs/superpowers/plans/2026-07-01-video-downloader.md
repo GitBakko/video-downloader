@@ -3605,11 +3605,16 @@ import XCTest
 @MainActor
 final class QueueStoreTests: XCTestCase {
 
+    /// Isolated UserDefaults suite so tests never read or write the real user prefs.
+    private func makeEphemeralSettings() -> SettingsStore {
+        SettingsStore(defaults: UserDefaults(suiteName: "QueueStoreTests-\(UUID().uuidString)")!)
+    }
+
     private func makeSUT() -> (QueueStore, FakeProber, FakeEngine) {
         let prober = FakeProber()
         let engine = FakeEngine()
         let sut = QueueStore(prober: prober, engine: engine,
-                             binaries: FakeBinaries(), settings: SettingsStore())
+                             binaries: FakeBinaries(), settings: makeEphemeralSettings())
         return (sut, prober, engine)
     }
 
@@ -3638,7 +3643,7 @@ final class QueueStoreTests: XCTestCase {
 
     func test_add_appliesDefaultFormatFromSettings() async {
         let prober = FakeProber()
-        let settings = SettingsStore()
+        let settings = makeEphemeralSettings()
         settings.defaultFormat = .audio(.best)
         let sut = QueueStore(prober: prober, engine: FakeEngine(),
                              binaries: FakeBinaries(), settings: settings)
@@ -4241,7 +4246,7 @@ public final class QueueStore {
 > - `SettingsStore` (`@Observable`, `init()`), with stored vars `destination: URL`, `defaultFormat: FormatChoice`, `embedThumbnailAndMetadata: Bool`.
 > - `BinaryManager: BinaryProviding`, `init()`; `ytDlpURL`, `ffmpegDirectory`, `ytDlpVersion`, `ensureInstalled() async throws`, `updateYtDlp() async throws`.
 > - `DownloadEngine: Downloading`, `init(binaries: BinaryProviding)`.
-> - `QueueStore` (`@Observable`), `init(prober:engine:binaries:settings:)`; `var items: [DownloadItem]`, `var isQueuePaused: Bool`, and methods `add(url:)` (non-async, kicks off probing internally — if it is `async`, wrap the call in a `Task`), `startDownload(_ id: UUID)`, `startAll()`, `cancel(_ id: UUID)`, `retry(_ id: UUID)`, `togglePauseQueue()`, `setFormat(_ FormatChoice, for id: UUID)`.
+> - `QueueStore` (`@Observable`), `init(prober:engine:binaries:settings:)`; `var items: [DownloadItem]`, `var isQueuePaused: Bool`, and methods `add(url:) async` (awaits the yt-dlp probe — call it from a `Task`), `startDownload(_ id: UUID)`, `startAll()`, `cancel(_ id: UUID)`, `retry(_ id: UUID)`, `togglePauseQueue()`, `setFormat(_ FormatChoice, for id: UUID)`.
 > - `MediaProbing`, `Downloading`, `BinaryProviding`, `DownloadEvent`, `DownloadSettings`, and all Phase-1 models (`DownloadItem`, `DownloadState`, `MediaFormat`, `FormatChoice`, `VideoQuality`, `AudioQuality`) are `public`.
 
 - [ ] Ensure XcodeGen is available (contract says the user installs it): `brew install xcodegen`.
@@ -4277,8 +4282,8 @@ Expected: `** BUILD SUCCEEDED **`
 
 **Goal:** Provide the real `MediaProbing` implementation. The Process launch itself is manual-verified (touches the real `yt-dlp`), but the *orchestration* — correct arguments and stderr→error mapping — is genuinely TDD-unit-tested by injecting a fake runner.
 
-> **Skip condition:** if Phase 2 already produced `Sources/VideoDownloaderCore/Probe/MediaProbe.swift` conforming to `MediaProbing`, skip this task and use it as-is; the app wiring in Task 7.3 works unchanged.
-> **Depends on** Phase 2's `MediaProbeParser` exposing `static func parse(_ data: Data) throws -> [DownloadItem]` and the shared `MediaProbing` protocol. If the parser entry point differs, change only the single call site noted below.
+> **Sole creator:** this task is the ONLY task that creates `Sources/VideoDownloaderCore/Probe/MediaProbe.swift`. (Phase 2 creates `YtDlpJSON.swift` + `MediaProbeParser.swift`; Phase 1b creates the `MediaProbing` protocol — neither creates `MediaProbe`.)
+> **Depends on** Phase 2's `MediaProbeParser` exposing `static func items(fromDumpJSON data: Data) throws -> [DownloadItem]` and Phase 1b's `MediaProbing` protocol. The single call site below uses exactly that entry point.
 
 - [ ] **Write the failing test first.** Create `Tests/VideoDownloaderCoreTests/MediaProbeTests.swift`:
 
@@ -4429,7 +4434,7 @@ public struct MediaProbe: MediaProbing {
                 message: MediaProbe.lastSignificantLine(stderr)
             )
         }
-        return try MediaProbeParser.parse(result.stdout)   // <- Phase 2 entry point; adapt if different
+        return try MediaProbeParser.items(fromDumpJSON: result.stdout)   // Phase 2's sole public entry point (result.stdout is Data)
     }
 
     static func lastSignificantLine(_ text: String) -> String {
@@ -4523,10 +4528,16 @@ final class AppModel {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !urls.isEmpty else { return }
-        for u in urls where !queue.items.contains(where: { $0.url == u }) {
-            queue.add(url: u)
-        }
         urlField = ""
+        // `QueueStore.add(url:)` is `async` (it awaits the yt-dlp probe), so it
+        // must be driven from a `Task`; a bare call here is a compile error.
+        // Sequential `await` means each item is appended before the next dedup
+        // check runs, so duplicates within `urls` are skipped correctly.
+        Task {
+            for u in urls where !queue.items.contains(where: { $0.url == u }) {
+                await queue.add(url: u)
+            }
+        }
     }
 
     // MARK: Update yt-dlp (spec §5.3)
