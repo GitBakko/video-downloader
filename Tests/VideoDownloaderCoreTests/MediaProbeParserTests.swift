@@ -50,6 +50,20 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertEqual(audioOnly.filesize, 3456789)
     }
 
+    func testAudioOnlyTrackHasNoVideoStreams() throws {
+        let data = try fixtureData("audio_only.json")
+        let items = try MediaProbeParser.items(fromDumpJSON: data)
+
+        XCTAssertEqual(items.count, 1)
+        let item = try XCTUnwrap(items.first)
+        XCTAssertEqual(item.title, "Some Music Track")
+        XCTAssertFalse(item.availableFormats.isEmpty)
+        // Every format is audio-only: vcodec "none", no resolution, no video-less flag on acodec.
+        XCTAssertTrue(item.availableFormats.allSatisfy { $0.vcodec == "none" })
+        XCTAssertTrue(item.availableFormats.allSatisfy { $0.resolution == nil })
+        XCTAssertFalse(item.availableFormats.contains { $0.acodec == "none" })
+    }
+
     func testPlaylistExpandsToOneReadyItemPerEntry() throws {
         let data = try fixtureData("playlist.json")
         let items = try MediaProbeParser.items(fromDumpJSON: data)

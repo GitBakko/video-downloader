@@ -1,0 +1,11 @@
+{
+  "id": "track123",
+  "title": "Some Music Track",
+  "duration": 245.0,
+  "thumbnail": "https://example.com/track123.jpg",
+  "webpage_url": "https://soundcloud.com/artist/track123",
+  "formats": [
+    { "format_id": "http_mp3_128", "ext": "mp3", "vcodec": "none", "acodec": "mp3", "filesize": 3920000, "tbr": 128.0, "format_note": "128kbps" },
+    { "format_id": "hls_opus_64", "ext": "opus", "vcodec": "none", "acodec": "opus", "filesize_approx": 1960000, "tbr": 64.0, "format_note": "64kbps" }
+  ]
+}
