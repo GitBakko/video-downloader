@@ -3,10 +3,15 @@ import XCTest
 
 final class MediaProbeTests: XCTestCase {
 
-    private struct StubBinaries: BinaryProviding {
-        var ytDlpURL: URL
-        var ffmpegDirectory: URL
-        var ytDlpVersion: String?
+    private final class StubBinaries: BinaryProviding, @unchecked Sendable {
+        let ytDlpURL: URL
+        let ffmpegDirectory: URL
+        let ytDlpVersion: String?
+        init(ytDlpURL: URL, ffmpegDirectory: URL, ytDlpVersion: String?) {
+            self.ytDlpURL = ytDlpURL
+            self.ffmpegDirectory = ffmpegDirectory
+            self.ytDlpVersion = ytDlpVersion
+        }
         func ensureInstalled() async throws {}
         func updateYtDlp() async throws {}
     }

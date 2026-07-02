@@ -118,7 +118,7 @@ public func pendingBinaryTasks(
 
 // MARK: - BinaryProviding protocol (owned by this file)
 
-public protocol BinaryProviding {
+public protocol BinaryProviding: AnyObject, Sendable {
     var ytDlpURL: URL { get }
     var ffmpegDirectory: URL { get }
     var ytDlpVersion: String? { get }
@@ -132,14 +132,28 @@ public enum BinaryManagerError: Error, Equatable {
 
 // MARK: - BinaryManager (side effects: network + filesystem + Process)
 
-public final class BinaryManager: BinaryProviding {
+/// `@unchecked Sendable` is justified: every stored dependency is either an
+/// immutable constant (`layout`, `resolver`, `arch`, `fileManager`, `session`)
+/// or the mutable `ytDlpVersion`, whose reads/writes are serialized by
+/// `versionLock`. So no shared mutable state is ever touched unsynchronized.
+public final class BinaryManager: BinaryProviding, @unchecked Sendable {
     private let layout: BinaryLayout
     private let resolver: BinaryURLResolver
     private let arch: HostArchitecture
     private let fileManager: FileManager
     private let session: URLSession
 
-    public private(set) var ytDlpVersion: String?
+    // `ytDlpVersion` is written off the main actor (ensureInstalled/updateYtDlp)
+    // and read on the main actor (SettingsView); the lock prevents a torn read.
+    private let versionLock = NSLock()
+    private var _ytDlpVersion: String?
+    public var ytDlpVersion: String? {
+        versionLock.lock(); defer { versionLock.unlock() }
+        return _ytDlpVersion
+    }
+    private func setYtDlpVersion(_ value: String?) {
+        versionLock.lock(); _ytDlpVersion = value; versionLock.unlock()
+    }
 
     public init(
         layout: BinaryLayout = .standard(),
@@ -167,14 +181,14 @@ public final class BinaryManager: BinaryProviding {
         for task in pending {
             try await download(task.remote, to: task.destination)
         }
-        ytDlpVersion = try? readYtDlpVersion()
+        setYtDlpVersion(try? await readYtDlpVersion())
     }
 
     /// Spec §5.3: re-download the latest yt-dlp and refresh the version.
     public func updateYtDlp() async throws {
         try fileManager.createDirectory(at: layout.binDirectory, withIntermediateDirectories: true)
         try await download(resolver.ytDlpDownloadURL(), to: layout.ytDlpURL)
-        ytDlpVersion = try? readYtDlpVersion()
+        setYtDlpVersion(try? await readYtDlpVersion())
     }
 
     // MARK: Side effects
@@ -182,42 +196,53 @@ public final class BinaryManager: BinaryProviding {
     private func download(_ remote: URL, to destination: URL) async throws {
         let (tempURL, response) = try await session.download(from: remote)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            try? fileManager.removeItem(at: tempURL)
             throw BinaryManagerError.downloadFailed(url: remote, status: http.statusCode)
         }
         if fileManager.fileExists(atPath: destination.path) {
             try fileManager.removeItem(at: destination)
         }
         try fileManager.moveItem(at: tempURL, to: destination)
-        try prepareExecutable(destination)
+        try await prepareExecutable(destination)
     }
 
     /// Remove the Gatekeeper quarantine attribute, set the execute bit, and
     /// ad-hoc sign unsigned arm64 binaries (spec §3.1 / §10). URLSession
     /// downloads are usually not quarantined, so `xattr -d` is best-effort.
-    private func prepareExecutable(_ url: URL) throws {
+    private func prepareExecutable(_ url: URL) async throws {
         try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
-        _ = try? Self.run("/usr/bin/xattr", ["-d", "com.apple.quarantine", url.path])
+        _ = try? await Self.run("/usr/bin/xattr", ["-d", "com.apple.quarantine", url.path])
         if arch.requiresAdHocSignature {
-            _ = try? Self.run("/usr/bin/codesign", ["-s", "-", "--force", url.path])
+            _ = try? await Self.run("/usr/bin/codesign", ["-s", "-", "--force", url.path])
         }
     }
 
-    private func readYtDlpVersion() throws -> String {
-        let out = try Self.run(layout.ytDlpURL.path, ["--version"])
+    private func readYtDlpVersion() async throws -> String {
+        let out = try await Self.run(layout.ytDlpURL.path, ["--version"])
         return out.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// Runs a short-lived tool and returns its stdout. The blocking pipe read and
+    /// `waitUntilExit()` run on a global queue so no cooperative thread is blocked.
     @discardableResult
-    private static func run(_ launchPath: String, _ arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: launchPath)
-        process.arguments = arguments
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = Pipe()
-        try process.run()
-        let data = stdout.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return String(data: data, encoding: .utf8) ?? ""
+    private static func run(_ launchPath: String, _ arguments: [String]) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global().async {
+                let process = Process()
+                process.executableURL = URL(fileURLWithPath: launchPath)
+                process.arguments = arguments
+                let stdout = Pipe()
+                process.standardOutput = stdout
+                process.standardError = Pipe()
+                do {
+                    try process.run()
+                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
+                    process.waitUntilExit()
+                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }

@@ -48,6 +48,10 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
             let state = LiveState()
 
             let worker = Task {
+                // Wire up termination BEFORE run() so the callback is never missed;
+                // awaiting it (instead of waitUntilExit()) frees the cooperative pool.
+                let terminated = ProcessTerminationSignal()
+                process.terminationHandler = { _ in terminated.signal() }
                 do {
                     try process.run()
 
@@ -80,7 +84,7 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
                         try await group.waitForAll()
                     }
 
-                    process.waitUntilExit()
+                    await terminated.wait()
                     self.remove(id)
 
                     if process.terminationReason == .uncaughtSignal {
@@ -124,12 +128,6 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
         lock.lock(); processes[id] = nil; lock.unlock()
     }
 
-    /// Extracts the destination file URL from a yt-dlp stdout line, if present.
-    /// Handles the common shapes:
-    ///   `[download] Destination: /path/File.mp4`
-    ///   `[ExtractAudio] Destination: /path/File.mp3`
-    ///   `[Merger] Merging formats into "/path/File.mkv"`
-    ///   `[download] /path/File.mp4 has already been downloaded`
     /// Picks the last non-empty stderr line, preferring an `ERROR:` line if any.
     static func lastMeaningfulLine(_ stderr: String) -> String {
         let lines = stderr
@@ -142,6 +140,12 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
         return lines.last ?? ""
     }
 
+    /// Extracts the destination file URL from a yt-dlp stdout line, if present.
+    /// Handles the common shapes:
+    ///   `[download] Destination: /path/File.mp4`
+    ///   `[ExtractAudio] Destination: /path/File.mp3`
+    ///   `[Merger] Merging formats into "/path/File.mkv"`
+    ///   `[download] /path/File.mp4 has already been downloaded`
     static func destination(from line: String) -> URL? {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 

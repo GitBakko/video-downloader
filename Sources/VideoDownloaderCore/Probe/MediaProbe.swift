@@ -29,11 +29,16 @@ public struct SystemProbeRunner: ProbeRunning {
         process.standardOutput = outPipe
         process.standardError = errPipe
 
+        // Wire up termination BEFORE run() so the callback is never missed;
+        // awaiting it (instead of waitUntilExit()) frees the cooperative pool.
+        let terminated = ProcessTerminationSignal()
+        process.terminationHandler = { _ in terminated.signal() }
+
         try process.run()
         async let out = Self.readAll(outPipe.fileHandleForReading)
         async let err = Self.readAll(errPipe.fileHandleForReading)
         let (outData, errData) = await (out, err)
-        process.waitUntilExit()
+        await terminated.wait()
         return ProbeResult(stdout: outData, stderr: errData, exitCode: process.terminationStatus)
     }
 
