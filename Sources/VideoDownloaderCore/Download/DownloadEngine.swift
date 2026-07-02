@@ -15,7 +15,114 @@ public enum DownloadError: Error, Equatable {
     }
 }
 
-final class DownloadEngine {
+public final class DownloadEngine: Downloading, @unchecked Sendable {
+
+    private let binaries: BinaryProviding
+
+    // Guards the id→Process registry used by cancel(_:).
+    private let lock = NSLock()
+    private var processes: [UUID: Process] = [:]
+
+    public init(binaries: BinaryProviding) {
+        self.binaries = binaries
+    }
+
+    // MARK: - Downloading
+
+    public func events(for item: DownloadItem, arguments: [String]) -> AsyncThrowingStream<DownloadEvent, Error> {
+        let id = item.id
+        let executableURL = binaries.ytDlpURL
+
+        return AsyncThrowingStream { continuation in
+            let process = Process()
+            process.executableURL = executableURL
+            process.arguments = arguments + [item.url]   // yt-dlp needs the URL as the final positional arg
+
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+
+            self.store(process, for: id)
+
+            let state = LiveState()
+
+            let worker = Task {
+                do {
+                    try process.run()
+
+                    // Read stdout and stderr CONCURRENTLY so a full pipe buffer
+                    // never blocks the child process (classic deadlock).
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        group.addTask {
+                            for try await line in stdoutPipe.fileHandleForReading.bytes.lines {
+                                if let dest = DownloadEngine.destination(from: line) {
+                                    await state.setDestination(dest)
+                                }
+                                guard let event = ProgressParser.parse(line: line) else { continue }
+                                switch event {
+                                case .processing:
+                                    if await state.beginProcessing() {
+                                        continuation.yield(.processing)
+                                    }
+                                case .progress:
+                                    continuation.yield(event)
+                                case .finished:
+                                    break // the engine owns the .finished event
+                                }
+                            }
+                        }
+                        group.addTask {
+                            for try await line in stderrPipe.fileHandleForReading.bytes.lines {
+                                await state.appendStderr(line)
+                            }
+                        }
+                        try await group.waitForAll()
+                    }
+
+                    process.waitUntilExit()
+                    self.remove(id)
+
+                    if process.terminationReason == .uncaughtSignal {
+                        // Killed by cancel(_:) → surface as cancellation.
+                        continuation.finish(throwing: CancellationError())
+                    } else if process.terminationStatus == 0 {
+                        continuation.yield(.finished(outputPath: await state.destination))
+                        continuation.finish()
+                    } else {
+                        continuation.finish(throwing: DownloadError.failed(
+                            message: DownloadEngine.lastMeaningfulLine(await state.stderr),
+                            exitCode: process.terminationStatus))
+                    }
+                } catch {
+                    self.remove(id)
+                    if process.isRunning { process.terminate() }
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { @Sendable _ in
+                worker.cancel()
+            }
+        }
+    }
+
+    public func cancel(_ id: UUID) {
+        lock.lock()
+        let process = processes[id]
+        lock.unlock()
+        process?.terminate() // SIGTERM → terminationReason == .uncaughtSignal
+    }
+
+    // MARK: - Process registry
+
+    private func store(_ process: Process, for id: UUID) {
+        lock.lock(); processes[id] = process; lock.unlock()
+    }
+
+    private func remove(_ id: UUID) {
+        lock.lock(); processes[id] = nil; lock.unlock()
+    }
 
     /// Extracts the destination file URL from a yt-dlp stdout line, if present.
     /// Handles the common shapes:
@@ -55,5 +162,22 @@ final class DownloadEngine {
             return path.isEmpty ? nil : URL(fileURLWithPath: path)
         }
         return nil
+    }
+}
+
+/// Guards mutable state shared by the concurrently-reading stdout/stderr tasks.
+private actor LiveState {
+    private(set) var destination: URL?
+    private(set) var stderr: String = ""
+    private var processingStarted = false
+
+    func setDestination(_ url: URL) { destination = url }
+    func appendStderr(_ line: String) { stderr += line + "\n" }
+
+    /// Returns `true` exactly once — the first time post-processing is seen.
+    func beginProcessing() -> Bool {
+        if processingStarted { return false }
+        processingStarted = true
+        return true
     }
 }
