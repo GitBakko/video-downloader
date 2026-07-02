@@ -98,4 +98,23 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .downloading)
         XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
     }
+
+    func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(1)
+        await sut.add(url: "https://example.com/v")
+        let id = sut.items[0].id
+
+        // Allowed while ready.
+        sut.setFormat(.audio(.best), for: id)
+        XCTAssertEqual(sut.items[0].selectedFormat, .audio(.best))
+
+        // Promote to downloading, then attempt an override.
+        sut.startDownload(id)
+        XCTAssertEqual(sut.items[0].state, .downloading)
+
+        sut.setFormat(.video(.p720), for: id)
+        XCTAssertEqual(sut.items[0].selectedFormat, .audio(.best),
+                       "format override is rejected once the item has started")
+    }
 }

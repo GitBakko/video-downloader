@@ -116,6 +116,14 @@ public final class QueueStore {
             ffmpegDirectory: binaries.ffmpegDirectory)
     }
 
+    // MARK: - Format override
+
+    public func setFormat(_ choice: FormatChoice, for id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              item.state == .ready || item.state == .queued else { return }
+        updateItem(id) { $0.selectedFormat = choice }
+    }
+
     // MARK: - Helpers
 
     private func updateItem(_ id: UUID, _ mutate: (inout DownloadItem) -> Void) {
