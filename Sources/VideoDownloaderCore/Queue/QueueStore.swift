@@ -100,6 +100,22 @@ public final class QueueStore {
 
     private func handle(_ event: DownloadEvent, for id: UUID) {
         switch event {
+        case let .progress(percent, speed, eta, stage):
+            updateItem(id) {
+                guard $0.state == .downloading else { return } // ignore stray progress once processing
+                $0.progress = percent
+                $0.speed = speed
+                $0.eta = eta
+                $0.stage = stage
+            }
+        case .processing:
+            updateItem(id) {
+                $0.state = .processing
+                $0.progress = nil   // indeterminate
+                $0.speed = nil
+                $0.eta = nil
+                $0.stage = nil      // UI shows generic "Elaborazione…" from state
+            }
         case let .finished(outputPath):
             updateItem(id) {
                 $0.state = .completed
@@ -108,8 +124,6 @@ public final class QueueStore {
                 $0.eta = nil
                 $0.outputPath = outputPath
             }
-        default:
-            break
         }
     }
 

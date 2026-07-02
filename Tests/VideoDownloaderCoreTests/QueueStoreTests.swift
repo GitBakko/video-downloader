@@ -191,6 +191,28 @@ final class QueueStoreTests: XCTestCase {
                        "retry hands the item to the engine a second time")
     }
 
+    func test_progressThenProcessing_updatesRowThenGoesIndeterminate() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(1)
+        await sut.add(url: "https://example.com/v")
+        let id = sut.items[0].id
+        sut.startDownload(id)
+        XCTAssertEqual(sut.items[0].state, .downloading)
+
+        engine.emitProgress(id, percent: 0.5, speed: "4.2 MB/s", eta: "0:38", stage: nil)
+        await waitUntil { sut.items[0].progress == 0.5 }
+        XCTAssertEqual(sut.items[0].state, .downloading)
+        XCTAssertEqual(sut.items[0].speed, "4.2 MB/s")
+        XCTAssertEqual(sut.items[0].eta, "0:38")
+        // No pass label is asserted: the real pipeline produces stage == nil and the
+        // UI derives the "Scaricamento…" caption from `state`, not from `stage`.
+
+        engine.emitProcessing(id)
+        await waitUntil { sut.items[0].state == .processing }
+        XCTAssertEqual(sut.items[0].state, .processing)
+        XCTAssertNil(sut.items[0].progress, "post-processing is indeterminate")
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)
