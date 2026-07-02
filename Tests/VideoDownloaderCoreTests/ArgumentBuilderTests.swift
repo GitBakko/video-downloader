@@ -114,6 +114,26 @@ final class ArgumentBuilderTests: XCTestCase {
         )
     }
 
+    // MARK: - .specific — video-only stream (acodec == "none")
+
+    func test_specific_videoOnly_addsBestAudioAndRemux() {
+        let videoOnly = MediaFormat(
+            formatID: "137", resolution: "1080p", ext: "mp4",
+            vcodec: "avc1.640028", acodec: "none", filesize: 123_456, note: nil
+        )
+        let args = ArgumentBuilder.downloadArguments(
+            for: .specific(formatID: "137"),
+            item: item(formats: [videoOnly]),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "137+bestaudio", "--merge-output-format", "mp4", "--remux-video", "mp4"]
+                + commonTail()
+        )
+    }
+
     // MARK: - .audio(.best)
 
     func test_audio_best_extractsMp3_noRemux() {

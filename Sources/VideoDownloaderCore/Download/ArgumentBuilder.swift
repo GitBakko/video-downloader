@@ -19,7 +19,15 @@ enum ArgumentBuilder {
             // v1: MP3 best only.
             args += ["-f", "ba/b", "-x", "--audio-format", "mp3"]
         case .specific(let formatID):
-            args += ["-f", formatID]            // refined in Task 3.5
+            let isVideoOnly = item.availableFormats
+                .first { $0.formatID == formatID }?
+                .acodec == "none"
+            if isVideoOnly {
+                args += ["-f", "\(formatID)+bestaudio"]
+                args += ["--merge-output-format", "mp4", "--remux-video", "mp4"]
+            } else {
+                args += ["-f", formatID]
+            }
         }
 
         // Common flags (spec §6). Fixed order → deterministic argument vectors.
