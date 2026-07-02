@@ -21,4 +21,14 @@ public enum DownloadState: Equatable, Sendable, CaseIterable {
             return false
         }
     }
+
+    /// A terminal state no longer changes on its own.
+    public var isTerminal: Bool {
+        switch self {
+        case .completed, .failed, .cancelled:
+            return true
+        case .probing, .ready, .queued, .downloading, .processing:
+            return false
+        }
+    }
 }

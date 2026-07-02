@@ -9,4 +9,17 @@ final class DownloadStateTests: XCTestCase {
                            "\(state) allowsFormatEditing should be \(expected)")
         }
     }
+
+    func test_isTerminal_isTrueOnlyForCompletedFailedCancelled() {
+        for state in DownloadState.allCases {
+            let expected = (state == .completed || state == .failed || state == .cancelled)
+            XCTAssertEqual(state.isTerminal, expected,
+                           "\(state) isTerminal should be \(expected)")
+        }
+    }
+
+    func test_equatable() {
+        XCTAssertEqual(DownloadState.downloading, .downloading)
+        XCTAssertNotEqual(DownloadState.downloading, .processing)
+    }
 }
