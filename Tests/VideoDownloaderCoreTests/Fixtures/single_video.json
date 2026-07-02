@@ -1,0 +1,38 @@
+{
+  "id": "dQw4w9WgXcQ",
+  "title": "Rick Astley - Never Gonna Give You Up",
+  "duration": 213.0,
+  "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+  "webpage_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "formats": [
+    {
+      "format_id": "140",
+      "ext": "m4a",
+      "vcodec": "none",
+      "acodec": "mp4a.40.2",
+      "filesize": 3456789,
+      "tbr": 129.5,
+      "format_note": "medium"
+    },
+    {
+      "format_id": "137",
+      "ext": "mp4",
+      "vcodec": "avc1.640028",
+      "acodec": "none",
+      "height": 1080,
+      "filesize_approx": 45678901,
+      "tbr": 2500.0,
+      "format_note": "1080p"
+    },
+    {
+      "format_id": "18",
+      "ext": "mp4",
+      "vcodec": "avc1.42001E",
+      "acodec": "mp4a.40.2",
+      "height": 360,
+      "filesize": 12345678,
+      "tbr": 500.0,
+      "format_note": "360p"
+    }
+  ]
+}
