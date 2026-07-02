@@ -43,7 +43,6 @@ final class AppModel {
 
     // MARK: Bootstrap (spec §5.1)
     func bootstrap() async {
-        await requestNotificationAuthorization()
         setupPhase = .installing("Scarico i componenti necessari (yt-dlp, ffmpeg)…")
         do {
             try await binaries.ensureInstalled()
@@ -52,6 +51,10 @@ final class AppModel {
         } catch {
             setupPhase = .failed(error.localizedDescription)
         }
+        // Requested OFF the critical path, fire-and-forget: in some run contexts
+        // (unsigned/dev builds launched from Xcode) UNUserNotificationCenter can
+        // hang, and it must never block the app from becoming usable.
+        Task { await requestNotificationAuthorization() }
     }
 
     func retrySetup() {
