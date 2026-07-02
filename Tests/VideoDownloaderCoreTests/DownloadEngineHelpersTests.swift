@@ -26,4 +26,32 @@ final class DownloadEngineHelpersTests: XCTestCase {
     func test_destination_returnsNilForProgressLine() {
         XCTAssertNil(DownloadEngine.destination(from: " 42.0%|4.20MiB/s|00:12"))
     }
+
+    func test_lastMeaningfulLine_prefersErrorLine() {
+        let stderr = """
+        WARNING: something minor
+        [debug] blah
+        ERROR: Video unavailable
+        """
+        XCTAssertEqual(DownloadEngine.lastMeaningfulLine(stderr), "ERROR: Video unavailable")
+    }
+
+    func test_lastMeaningfulLine_fallsBackToLastNonEmptyLine() {
+        let stderr = "line one\n   \nlast line\n"
+        XCTAssertEqual(DownloadEngine.lastMeaningfulLine(stderr), "last line")
+    }
+
+    func test_lastMeaningfulLine_emptyForBlankInput() {
+        XCTAssertEqual(DownloadEngine.lastMeaningfulLine("   \n\n"), "")
+    }
+
+    func test_downloadError_userMessage_usesMessage() {
+        let error = DownloadError.failed(message: "ERROR: nope", exitCode: 1)
+        XCTAssertEqual(error.userMessage, "ERROR: nope")
+    }
+
+    func test_downloadError_userMessage_fallbackWhenEmpty() {
+        let error = DownloadError.failed(message: "", exitCode: 1)
+        XCTAssertEqual(error.userMessage, "Download non riuscito.")
+    }
 }
