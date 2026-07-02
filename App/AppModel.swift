@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AppKit
+import UserNotifications
 import VideoDownloaderCore
 
 @MainActor
@@ -23,6 +24,8 @@ final class AppModel {
     var urlField: String = ""
     var updatingYtDlp: Bool = false
     private var lastClipboardSuggestion: String?
+    private var notifiedItemIDs: Set<UUID> = []
+    private let notificationPresenter = NotificationForegroundPresenter()
 
     init() {
         let settings = SettingsStore()
@@ -36,6 +39,7 @@ final class AppModel {
 
     // MARK: Bootstrap (spec §5.1)
     func bootstrap() async {
+        await requestNotificationAuthorization()
         setupPhase = .installing("Scarico i componenti necessari (yt-dlp, ffmpeg)…")
         do {
             try await binaries.ensureInstalled()
@@ -83,6 +87,31 @@ final class AppModel {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    // MARK: Notifications + sound (spec §5.2 / §9)
+    func requestNotificationAuthorization() async {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = notificationPresenter
+        _ = try? await center.requestAuthorization(options: [.alert, .sound])
+    }
+
+    /// Fires a notification + sound once for each item that has newly reached `.completed`.
+    func handleCompletions() {
+        for item in queue.items where item.state == .completed && !notifiedItemIDs.contains(item.id) {
+            notifiedItemIDs.insert(item.id)
+            postFinishedNotification(for: item)
+        }
+    }
+
+    private func postFinishedNotification(for item: DownloadItem) {
+        let content = UNMutableNotificationContent()
+        content.title = "Download completato"
+        content.body = item.title ?? item.url
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: item.id.uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
+        NSSound(named: NSSound.Name("Glass"))?.play()
+    }
+
     // MARK: Clipboard proposal (spec §3.6 / §5.2)
     func suggestClipboardURL() {
         guard let raw = NSPasteboard.general.string(forType: .string) else { return }
@@ -99,5 +128,16 @@ final class AppModel {
         guard !s.isEmpty, !s.contains(where: { $0 == " " || $0.isNewline }) else { return false }
         guard let url = URL(string: s), let scheme = url.scheme?.lowercased() else { return false }
         return (scheme == "http" || scheme == "https") && (url.host?.isEmpty == false)
+    }
+}
+
+/// Lets notifications appear while the app is frontmost.
+final class NotificationForegroundPresenter: NSObject, UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
     }
 }

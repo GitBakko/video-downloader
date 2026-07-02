@@ -58,6 +58,13 @@ struct MainWindowView: View {
 
             list
         }
+        .onChange(of: completionSignature) { _, _ in
+            app.handleCompletions()
+        }
+    }
+
+    private var completionSignature: [String] {
+        app.queue.items.map { "\($0.id.uuidString):\($0.state)" }
     }
 
     private var list: some View {
