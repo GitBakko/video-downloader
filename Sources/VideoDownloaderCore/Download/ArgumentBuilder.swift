@@ -21,7 +21,7 @@ enum ArgumentBuilder {
         case .specific(let formatID):
             let isVideoOnly = item.availableFormats
                 .first { $0.formatID == formatID }?
-                .acodec == "none"
+                .isVideoOnly ?? false
             if isVideoOnly {
                 args += ["-f", "\(formatID)+bestaudio"]
                 args += ["--merge-output-format", "mp4", "--remux-video", "mp4"]
@@ -39,7 +39,7 @@ enum ArgumentBuilder {
         args += ["--newline"]
         args += [
             "--progress-template",
-            "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+            "download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
         ]
 
         if settings.embedThumbnailAndMetadata {

@@ -130,6 +130,8 @@ struct FormatPickerView: View {
                         Text(fmt.ext).frame(width: 56, alignment: .leading)
                         Text(codecSummary(fmt)).frame(width: 160, alignment: .leading)
                             .foregroundStyle(.secondary)
+                        Text(bitrate(fmt.tbr)).frame(width: 64, alignment: .trailing)
+                            .foregroundStyle(.secondary)
                         Text(fileSize(fmt.filesize)).frame(width: 80, alignment: .trailing)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 0)
@@ -162,5 +164,10 @@ struct FormatPickerView: View {
     private func fileSize(_ bytes: Int64?) -> String {
         guard let bytes else { return "—" }
         return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+    }
+
+    private func bitrate(_ tbr: Double?) -> String {
+        guard let tbr else { return "—" }
+        return "\(Int(tbr.rounded())) kbps"
     }
 }

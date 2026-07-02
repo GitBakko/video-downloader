@@ -43,6 +43,7 @@ public enum MediaProbeParser {
             vcodec: f.vcodec,                          // "none" preserved
             acodec: f.acodec,                          // "none" preserved
             filesize: f.filesize ?? f.filesizeApprox,  // exact, else approximate
+            tbr: f.tbr,                                // total average bitrate (kbps)
             note: f.formatNote
         )
     }

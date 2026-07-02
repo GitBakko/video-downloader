@@ -11,7 +11,7 @@ final class ArgumentBuilderTests: XCTestCase {
 
     private let outputTemplate = "/Users/tester/Movies/VD/%(title)s [%(id)s].%(ext)s"
     private let progressTemplate =
-        "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
+        "download:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"
 
     // MARK: - Helpers
 

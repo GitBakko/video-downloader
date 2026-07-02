@@ -41,6 +41,7 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertEqual(videoOnly.resolution, "1080p")
         XCTAssertEqual(videoOnly.ext, "mp4")
         XCTAssertEqual(videoOnly.filesize, 45678901)   // came from filesize_approx
+        XCTAssertEqual(videoOnly.tbr, 2500.0)          // total average bitrate (kbps)
 
         // Audio-only stream: vcodec "none" preserved, no resolution, exact filesize.
         let audioOnly = try XCTUnwrap(item.availableFormats.first { $0.formatID == "140" })
@@ -48,6 +49,7 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertEqual(audioOnly.acodec, "mp4a.40.2")
         XCTAssertNil(audioOnly.resolution)
         XCTAssertEqual(audioOnly.filesize, 3456789)
+        XCTAssertEqual(audioOnly.tbr, 129.5)
     }
 
     func testAudioOnlyTrackHasNoVideoStreams() throws {

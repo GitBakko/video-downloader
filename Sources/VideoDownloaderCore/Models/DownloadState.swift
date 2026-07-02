@@ -1,5 +1,3 @@
-import Foundation
-
 /// The lifecycle state of a single download item (spec §4).
 public enum DownloadState: Equatable, Sendable, CaseIterable {
     case probing
