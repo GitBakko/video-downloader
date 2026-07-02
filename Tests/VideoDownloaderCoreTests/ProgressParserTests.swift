@@ -58,4 +58,33 @@ final class ProgressParserTests: XCTestCase {
         assertIgnored("downloading: 1 of 3")        // not a 3-field pipe body
         assertIgnored("12.3%|1.00MiB/s")             // only 2 fields, not 3
     }
+
+    // MARK: - 4.2 Unknown / unavailable values → nil
+
+    func testMapsUnknownValuesToNil() {
+        assertProgress(
+            "  N/A%|Unknown B/s|Unknown",
+            percent: nil,
+            speed: nil,
+            eta: nil
+        )
+    }
+
+    func testMapsDashesToNilButKeepsPercent() {
+        assertProgress(
+            "  0.0%|---|---",
+            percent: 0.0,
+            speed: nil,
+            eta: nil
+        )
+    }
+
+    func testBareNAValuesAreNil() {
+        assertProgress(
+            "  5.0%|  N/A|  N/A",
+            percent: 0.05,
+            speed: nil,
+            eta: nil
+        )
+    }
 }

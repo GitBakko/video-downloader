@@ -5,26 +5,34 @@ import Foundation
 /// `PERCENT|SPEED|ETA` body. Pure value-in / value-out: no `Process`, no I/O.
 enum ProgressParser {
 
-    /// Parse a single `--progress-template` line: `PERCENT|SPEED|ETA`.
+    /// Tokens yt-dlp uses for an unknown/unavailable value (compared case-insensitively).
+    private static let unknownTokens: Set<String> = ["n/a", "---", "unknown", ""]
+
     static func parse(line: String) -> DownloadEvent? {
         let fields = line.components(separatedBy: "|")
         guard fields.count == 3 else { return nil }
         return .progress(
             percent: parsePercent(fields[0]),
-            speed: trimmedField(fields[1]),
-            eta: trimmedField(fields[2]),
+            speed: normalize(fields[1]),
+            eta: normalize(fields[2]),
             stage: nil
         )
     }
 
-    private static func trimmedField(_ raw: String) -> String {
-        raw.trimmingCharacters(in: .whitespaces)
+    /// Trim a field and map yt-dlp's "unknown" tokens to `nil`.
+    private static func normalize(_ raw: String) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let lower = trimmed.lowercased()
+        if unknownTokens.contains(lower) { return nil }
+        if lower.hasPrefix("unknown ") { return nil }   // e.g. "Unknown B/s"
+        return trimmed
     }
 
-    /// "  12.3%" → 0.123. Unparseable → nil.
+    /// "  12.3%" → 0.123. Unknown / unparseable → `nil`.
     private static func parsePercent(_ raw: String) -> Double? {
         var trimmed = raw.trimmingCharacters(in: .whitespaces)
         if trimmed.hasSuffix("%") { trimmed.removeLast() }
-        return Double(trimmed).map { $0 / 100.0 }
+        guard let value = normalize(trimmed), let number = Double(value) else { return nil }
+        return number / 100.0
     }
 }
