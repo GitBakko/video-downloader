@@ -85,3 +85,33 @@ public struct BinaryLayout: Sendable {
     public var ffmpegURL: URL { binDirectory.appendingPathComponent("ffmpeg", isDirectory: false) }
     public var ffprobeURL: URL { binDirectory.appendingPathComponent("ffprobe", isDirectory: false) }
 }
+
+// MARK: - Install planning (pure)
+
+public struct BinaryDownloadTask: Equatable, Sendable {
+    public let remote: URL
+    public let destination: URL
+    public init(remote: URL, destination: URL) {
+        self.remote = remote
+        self.destination = destination
+    }
+}
+
+public extension BinaryURLResolver {
+    /// The full set of downloads required for a fresh install, arch-matched.
+    func installTasks(layout: BinaryLayout, arch: HostArchitecture) -> [BinaryDownloadTask] {
+        [
+            BinaryDownloadTask(remote: ytDlpDownloadURL(), destination: layout.ytDlpURL),
+            BinaryDownloadTask(remote: ffmpegDownloadURL(arch: arch), destination: layout.ffmpegURL),
+            BinaryDownloadTask(remote: ffprobeDownloadURL(arch: arch), destination: layout.ffprobeURL),
+        ]
+    }
+}
+
+/// Pure: keeps only the tasks whose destination is not yet installed.
+public func pendingBinaryTasks(
+    _ tasks: [BinaryDownloadTask],
+    isInstalled: (URL) -> Bool
+) -> [BinaryDownloadTask] {
+    tasks.filter { !isInstalled($0.destination) }
+}
