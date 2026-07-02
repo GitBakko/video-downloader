@@ -7,14 +7,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if app.setupPhase == .ready {
-                VStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle")
-                        .font(.largeTitle).foregroundStyle(.green)
-                    Text("Componenti pronti").font(.headline)
-                    Text("La finestra principale è collegata nel Task 7.6.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                MainWindowView()
             } else {
                 SetupView()
             }
