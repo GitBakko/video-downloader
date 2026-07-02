@@ -151,4 +151,33 @@ final class ArgumentBuilderTests: XCTestCase {
         XCTAssertFalse(args.contains("--remux-video"))
         XCTAssertFalse(args.contains("--merge-output-format"))
     }
+
+    // MARK: - .specific — progressive stream (has audio)
+
+    func test_specific_withAudio_usesPlainSelector_noRemux() {
+        let progressive = MediaFormat(
+            formatID: "22", resolution: "720p", ext: "mp4",
+            vcodec: "avc1.64001F", acodec: "mp4a.40.2", filesize: 999_999, note: nil
+        )
+        let args = ArgumentBuilder.downloadArguments(
+            for: .specific(formatID: "22"),
+            item: item(formats: [progressive]),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(args, ["-f", "22"] + commonTail())
+        XCTAssertFalse(args.contains("+bestaudio"))
+        XCTAssertFalse(args.contains("--remux-video"))
+    }
+
+    func test_specific_formatNotFound_treatedAsHavingAudio() {
+        // No matching MediaFormat → cannot prove it is video-only → no +bestaudio.
+        let args = ArgumentBuilder.downloadArguments(
+            for: .specific(formatID: "999"),
+            item: item(formats: []),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(args, ["-f", "999"] + commonTail())
+    }
 }
