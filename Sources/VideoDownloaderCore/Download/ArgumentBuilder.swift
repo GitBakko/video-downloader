@@ -42,6 +42,10 @@ enum ArgumentBuilder {
             "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
         ]
 
+        if settings.embedThumbnailAndMetadata {
+            args += ["--embed-thumbnail", "--embed-metadata"]
+        }
+
         return args
     }
 

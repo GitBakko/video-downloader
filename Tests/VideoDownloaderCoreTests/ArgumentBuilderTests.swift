@@ -180,4 +180,32 @@ final class ArgumentBuilderTests: XCTestCase {
         )
         XCTAssertEqual(args, ["-f", "999"] + commonTail())
     }
+
+    // MARK: - Embed thumbnail/metadata toggle
+
+    func test_embedFlags_appendedWhenEnabled() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.best),
+            item: item(),
+            settings: settings(embed: true),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "bv*+ba/b", "--merge-output-format", "mp4", "--remux-video", "mp4"]
+                + commonTail(embed: true)
+        )
+        XCTAssertEqual(Array(args.suffix(2)), ["--embed-thumbnail", "--embed-metadata"])
+    }
+
+    func test_embedFlags_absentWhenDisabled() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.best),
+            item: item(),
+            settings: settings(embed: false),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertFalse(args.contains("--embed-thumbnail"))
+        XCTAssertFalse(args.contains("--embed-metadata"))
+    }
 }
