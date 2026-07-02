@@ -99,6 +99,46 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
     }
 
+    func test_pause_preventsPromotionOnStartAll() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+
+        sut.togglePauseQueue()          // paused
+        sut.startAll()
+
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 0)
+        XCTAssertEqual(sut.items.filter { $0.state == .queued }.count, 3)
+        XCTAssertTrue(engine.startedIDs.isEmpty)
+
+        sut.togglePauseQueue()          // resumed
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
+        XCTAssertEqual(sut.items.filter { $0.state == .queued }.count, 1)
+    }
+
+    func test_pauseWhileDownloading_blocksPromotionUntilResume() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()                  // 2 downloading, 1 queued
+
+        let first = sut.items[0].id
+        let third = sut.items[2].id
+
+        sut.togglePauseQueue()          // pause: in-flight downloads untouched
+        engine.finish(first)            // a slot frees, but we are paused
+
+        // Give the completion a chance to run; the third must NOT promote.
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(sut.items.first(where: { $0.id == first })?.state, .completed)
+        XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .queued)
+
+        sut.togglePauseQueue()          // resume → now it promotes
+        await waitUntil { sut.items.first(where: { $0.id == third })?.state == .downloading }
+        XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .downloading)
+        _ = engine
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)

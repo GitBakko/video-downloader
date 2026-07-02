@@ -6,6 +6,7 @@ import Observation
 public final class QueueStore {
 
     public private(set) var items: [DownloadItem] = []
+    public private(set) var isQueuePaused: Bool = false
 
     private let prober: MediaProbing
     private let engine: Downloading
@@ -55,6 +56,11 @@ public final class QueueStore {
         promoteQueued()
     }
 
+    public func togglePauseQueue() {
+        isQueuePaused.toggle()
+        if !isQueuePaused { promoteQueued() }
+    }
+
     // MARK: - Promotion
 
     private var activeSlots: Int {
@@ -62,6 +68,7 @@ public final class QueueStore {
     }
 
     private func promoteQueued() {
+        guard !isQueuePaused else { return }
         while activeSlots < maxConcurrent,
               let next = items.first(where: { $0.state == .queued }) {
             updateItem(next.id) { $0.state = .downloading }
