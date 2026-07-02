@@ -18,5 +18,11 @@ struct VideoDownloaderApp: App {
                     .disabled(app.updatingYtDlp)
             }
         }
+
+        Settings {
+            SettingsView()
+                .environment(app)
+                .frame(width: 480)
+        }
     }
 }
