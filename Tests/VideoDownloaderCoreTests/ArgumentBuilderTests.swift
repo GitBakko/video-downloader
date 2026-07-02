@@ -66,4 +66,51 @@ final class ArgumentBuilderTests: XCTestCase {
                 + commonTail()
         )
     }
+
+    // MARK: - .video capped resolutions
+
+    func test_video_p1080() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.p1080),
+            item: item(),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "bv*[height<=1080]+ba/b[height<=1080]",
+             "--merge-output-format", "mp4", "--remux-video", "mp4"]
+                + commonTail()
+        )
+    }
+
+    func test_video_p720() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.p720),
+            item: item(),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "bv*[height<=720]+ba/b[height<=720]",
+             "--merge-output-format", "mp4", "--remux-video", "mp4"]
+                + commonTail()
+        )
+    }
+
+    func test_video_p480() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.p480),
+            item: item(),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "bv*[height<=480]+ba/b[height<=480]",
+             "--merge-output-format", "mp4", "--remux-video", "mp4"]
+                + commonTail()
+        )
+    }
 }

@@ -38,8 +38,10 @@ enum ArgumentBuilder {
 
     private static func videoSelector(for quality: VideoQuality) -> String {
         switch quality {
-        case .best: return "bv*+ba/b"
-        default:    return "bv*+ba/b"           // refined in Task 3.3
+        case .best:  return "bv*+ba/b"
+        case .p1080: return "bv*[height<=1080]+ba/b[height<=1080]"
+        case .p720:  return "bv*[height<=720]+ba/b[height<=720]"
+        case .p480:  return "bv*[height<=480]+ba/b[height<=480]"
         }
     }
 }
