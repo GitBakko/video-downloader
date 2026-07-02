@@ -86,4 +86,9 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertTrue(first.availableFormats.contains { $0.acodec == "none" })
         XCTAssertTrue(first.availableFormats.contains { $0.vcodec == "none" })
     }
+
+    func testMalformedJSONThrows() {
+        let garbage = Data("not json at all".utf8)
+        XCTAssertThrowsError(try MediaProbeParser.items(fromDumpJSON: garbage))
+    }
 }
