@@ -12,7 +12,7 @@ final class MediaProbeTests: XCTestCase {
             self.ffmpegDirectory = ffmpegDirectory
             self.ytDlpVersion = ytDlpVersion
         }
-        func ensureInstalled() async throws {}
+        func ensureInstalled(onProgress: @escaping @Sendable (Double) -> Void) async throws { onProgress(1) }
         func updateYtDlp() async throws {}
     }
 

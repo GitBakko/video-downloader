@@ -89,6 +89,6 @@ final class FakeBinaries: BinaryProviding, @unchecked Sendable {
     var ytDlpURL: URL = URL(fileURLWithPath: "/tmp/fake/yt-dlp")
     var ffmpegDirectory: URL = URL(fileURLWithPath: "/tmp/fake")
     var ytDlpVersion: String? = "2026.07.01"
-    func ensureInstalled() async throws {}
+    func ensureInstalled(onProgress: @escaping @Sendable (Double) -> Void) async throws { onProgress(1) }
     func updateYtDlp() async throws {}
 }
