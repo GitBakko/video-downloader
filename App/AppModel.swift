@@ -21,6 +21,8 @@ final class AppModel {
 
     // UI state
     var setupPhase: SetupPhase = .installing("Verifica dei componenti…")
+    /// Overall first-launch download progress (`0...1`); `nil` means indeterminate.
+    var setupProgress: Double?
     var urlField: String = ""
     var updatingYtDlp: Bool = false
     private var lastClipboardSuggestion: String?
@@ -44,11 +46,20 @@ final class AppModel {
     // MARK: Bootstrap (spec §5.1)
     func bootstrap() async {
         setupPhase = .installing("Scarico i componenti necessari (yt-dlp, ffmpeg)…")
+        setupProgress = nil
         do {
-            try await binaries.ensureInstalled()
+            try await binaries.ensureInstalled(onProgress: { [weak self] frac in
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Ignore stray late reports once we've left the installing phase.
+                    if case .installing = self.setupPhase { self.setupProgress = frac }
+                }
+            })
+            setupProgress = nil
             setupPhase = .ready
             suggestClipboardURL()
         } catch {
+            setupProgress = nil
             setupPhase = .failed(error.localizedDescription)
         }
         // Requested OFF the critical path, fire-and-forget: in some run contexts

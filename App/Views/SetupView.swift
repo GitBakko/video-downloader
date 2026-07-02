@@ -13,8 +13,20 @@ struct SetupView: View {
 
             switch app.setupPhase {
             case .installing(let message):
-                ProgressView(message)
-                    .progressViewStyle(.circular)
+                if let progress = app.setupProgress {
+                    VStack(spacing: 6) {
+                        ProgressView(value: progress) { Text(message) }
+                            .progressViewStyle(.linear)
+                            .frame(maxWidth: 300)
+                        Text("\(Int(progress * 100))%")
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    ProgressView(message)
+                        .progressViewStyle(.circular)
+                }
             case .failed(let message):
                 VStack(spacing: 10) {
                     Text("Installazione dei componenti non riuscita")
