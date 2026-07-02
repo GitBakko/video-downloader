@@ -9,7 +9,8 @@ enum ProgressParser {
     private static let unknownTokens: Set<String> = ["n/a", "---", "unknown", ""]
 
     static func parse(line: String) -> DownloadEvent? {
-        let fields = line.components(separatedBy: "|")
+        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fields = trimmed.components(separatedBy: "|")
         guard fields.count == 3 else { return nil }
         return .progress(
             percent: parsePercent(fields[0]),
@@ -21,7 +22,7 @@ enum ProgressParser {
 
     /// Trim a field and map yt-dlp's "unknown" tokens to `nil`.
     private static func normalize(_ raw: String) -> String? {
-        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = trimmed.lowercased()
         if unknownTokens.contains(lower) { return nil }
         if lower.hasPrefix("unknown ") { return nil }   // e.g. "Unknown B/s"
@@ -30,7 +31,7 @@ enum ProgressParser {
 
     /// "  12.3%" → 0.123. Unknown / unparseable → `nil`.
     private static func parsePercent(_ raw: String) -> Double? {
-        var trimmed = raw.trimmingCharacters(in: .whitespaces)
+        var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasSuffix("%") { trimmed.removeLast() }
         guard let value = normalize(trimmed), let number = Double(value) else { return nil }
         return number / 100.0

@@ -87,4 +87,24 @@ final class ProgressParserTests: XCTestCase {
             eta: nil
         )
     }
+
+    // MARK: - 4.3 Whitespace / carriage-return / newline tolerance
+
+    func testTrimsLeadingWhitespaceAndTrailingCarriageReturn() {
+        assertProgress(
+            "   5.0%|  N/A|00:12\r",
+            percent: 0.05,
+            speed: nil,
+            eta: "00:12"
+        )
+    }
+
+    func testTrimsTrailingNewline() {
+        assertProgress(
+            " 5.0%|1.00MiB/s|00:12\n",
+            percent: 0.05,
+            speed: "1.00MiB/s",
+            eta: "00:12"
+        )
+    }
 }
