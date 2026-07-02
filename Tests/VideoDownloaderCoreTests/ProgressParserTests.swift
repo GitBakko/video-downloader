@@ -107,4 +107,33 @@ final class ProgressParserTests: XCTestCase {
             eta: "00:12"
         )
     }
+
+    private func assertProcessing(_ raw: String, file: StaticString = #filePath, line: UInt = #line) {
+        guard case .processing? = ProgressParser.parse(line: raw) else {
+            return XCTFail("expected .processing for \(raw)", file: file, line: line)
+        }
+    }
+
+    // MARK: - 4.4 Post-processing indicators
+
+    func testRecognisesPostProcessingLines() {
+        assertProcessing("[Merger] Merging formats into \"out.mp4\"")
+        assertProcessing("[ExtractAudio] Destination: song.mp3")
+        assertProcessing("[VideoRemuxer] Remuxing video from mp4 to mp4")
+        assertProcessing("[EmbedThumbnail] ffmpeg: embedding thumbnail in \"out.mp4\"")
+        assertProcessing("[Metadata] Adding metadata to \"out.mp4\"")
+    }
+
+    func testIsPostProcessingHelper() {
+        XCTAssertTrue(ProgressParser.isPostProcessing("[Merger] Merging formats"))
+        XCTAssertTrue(ProgressParser.isPostProcessing("   [ExtractAudio] Destination: song.mp3"))
+        XCTAssertFalse(ProgressParser.isPostProcessing(" 12.3%|4.20MiB/s|00:38"))
+        XCTAssertFalse(ProgressParser.isPostProcessing("some random line"))
+    }
+
+    func testProgressLineIsNotPostProcessing() {
+        // Regression: a progress line must still parse as .progress.
+        assertProgress(" 50.0%|2.00MiB/s|00:05",
+                       percent: 0.5, speed: "2.00MiB/s", eta: "00:05")
+    }
 }
