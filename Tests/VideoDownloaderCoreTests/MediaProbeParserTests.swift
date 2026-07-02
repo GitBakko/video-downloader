@@ -26,4 +26,27 @@ final class MediaProbeParserTests: XCTestCase {
                        URL(string: "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg"))
         XCTAssertEqual(item.state, .ready)  // DownloadState is a payload-free enum ⇒ Equatable
     }
+
+    func testSingleVideoMapsVideoOnlyAndAudioOnlyFormats() throws {
+        let data = try fixtureData("single_video.json")
+        let item = try XCTUnwrap(try MediaProbeParser.items(fromDumpJSON: data).first)
+
+        XCTAssertEqual(item.availableFormats.count, 3)
+
+        // Video-only stream: acodec "none" preserved, resolution derived from
+        // height ("1080p"), filesize taken from filesize_approx (no exact filesize).
+        let videoOnly = try XCTUnwrap(item.availableFormats.first { $0.formatID == "137" })
+        XCTAssertEqual(videoOnly.acodec, "none")
+        XCTAssertEqual(videoOnly.vcodec, "avc1.640028")
+        XCTAssertEqual(videoOnly.resolution, "1080p")
+        XCTAssertEqual(videoOnly.ext, "mp4")
+        XCTAssertEqual(videoOnly.filesize, 45678901)   // came from filesize_approx
+
+        // Audio-only stream: vcodec "none" preserved, no resolution, exact filesize.
+        let audioOnly = try XCTUnwrap(item.availableFormats.first { $0.formatID == "140" })
+        XCTAssertEqual(audioOnly.vcodec, "none")
+        XCTAssertEqual(audioOnly.acodec, "mp4a.40.2")
+        XCTAssertNil(audioOnly.resolution)
+        XCTAssertEqual(audioOnly.filesize, 3456789)
+    }
 }

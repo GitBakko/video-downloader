@@ -18,7 +18,7 @@ public enum MediaProbeParser {
             title: info.title,
             thumbnailURL: info.thumbnail.flatMap { URL(string: $0) },
             duration: info.duration,
-            availableFormats: [],
+            availableFormats: (info.formats ?? []).map(mapFormat),
             selectedFormat: .video(.best),   // neutral default; QueueStore.add applies the real default
             state: .ready,
             stage: nil,
@@ -27,6 +27,18 @@ public enum MediaProbeParser {
             eta: nil,
             outputPath: nil,
             errorMessage: nil
+        )
+    }
+
+    private static func mapFormat(_ f: YtDlpFormat) -> MediaFormat {
+        MediaFormat(
+            formatID: f.formatID,
+            resolution: f.height.map { "\($0)p" },   // 1080 → "1080p"; nil ⇒ nil (audio)
+            ext: f.ext,
+            vcodec: f.vcodec,                          // "none" preserved
+            acodec: f.acodec,                          // "none" preserved
+            filesize: f.filesize ?? f.filesizeApprox,  // exact, else approximate
+            note: f.formatNote
         )
     }
 }
