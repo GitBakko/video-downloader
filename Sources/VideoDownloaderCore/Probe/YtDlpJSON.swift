@@ -13,10 +13,11 @@ struct YtDlpInfo: Decodable {
     let webpageURL: String?
     let url: String?
     let formats: [YtDlpFormat]?
+    let entries: [YtDlpInfo?]?
 
     enum CodingKeys: String, CodingKey {
         case type = "_type"
-        case id, title, duration, thumbnail, url, formats
+        case id, title, duration, thumbnail, url, formats, entries
         case webpageURL = "webpage_url"
     }
 }

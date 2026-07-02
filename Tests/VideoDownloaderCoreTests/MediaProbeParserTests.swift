@@ -49,4 +49,27 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertNil(audioOnly.resolution)
         XCTAssertEqual(audioOnly.filesize, 3456789)
     }
+
+    func testPlaylistExpandsToOneReadyItemPerEntry() throws {
+        let data = try fixtureData("playlist.json")
+        let items = try MediaProbeParser.items(fromDumpJSON: data)
+
+        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.map(\.title), ["First Video", "Second Video", "Third Video"])
+        XCTAssertTrue(items.allSatisfy { $0.state == .ready })
+
+        // Each entry keeps its own URL and receives a distinct id.
+        XCTAssertEqual(items.map(\.url), [
+            "https://www.youtube.com/watch?v=vid001",
+            "https://www.youtube.com/watch?v=vid002",
+            "https://www.youtube.com/watch?v=vid003"
+        ])
+        XCTAssertEqual(Set(items.map(\.id)).count, 3)
+
+        // Formats are mapped per entry, including the video-only / audio-only pair.
+        let first = try XCTUnwrap(items.first)
+        XCTAssertEqual(first.availableFormats.count, 2)
+        XCTAssertTrue(first.availableFormats.contains { $0.acodec == "none" })
+        XCTAssertTrue(first.availableFormats.contains { $0.vcodec == "none" })
+    }
 }

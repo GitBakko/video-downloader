@@ -8,6 +8,11 @@ public enum MediaProbeParser {
     /// `.ready` item per entry (added in a later task).
     public static func items(fromDumpJSON data: Data) throws -> [DownloadItem] {
         let info = try JSONDecoder().decode(YtDlpInfo.self, from: data)
+        if info.type == "playlist", let entries = info.entries {
+            // Skip `null` entries (unavailable/private videos) so one dead video
+            // never fails the whole probe → one .ready item per surviving entry.
+            return entries.compactMap { $0 }.map { makeItem(from: $0) }
+        }
         return [makeItem(from: info)]
     }
 
