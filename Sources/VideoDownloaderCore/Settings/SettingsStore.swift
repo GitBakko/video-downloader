@@ -4,6 +4,7 @@ import Observation
 /// Persistent, user-facing settings (spec §3.5). Backed by `UserDefaults`,
 /// `@Observable` so SwiftUI re-renders on change. Single source of truth for the
 /// download destination, the default `FormatChoice`, and the embed toggle.
+@MainActor
 @Observable
 public final class SettingsStore {
 

@@ -40,6 +40,39 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(prober.probedURLs, ["https://example.com/playlist"])
     }
 
+    func test_add_showsProbingPlaceholder_thenReplacesWithReadyItems() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)
+        let gate = ProbeGate()
+        prober.gate = gate
+
+        let task = Task { await sut.add(url: "https://example.com/playlist") }
+
+        // The placeholder appears immediately, before the (gated) probe returns.
+        await waitUntil { sut.items.count == 1 && sut.items.first?.state == .probing }
+        XCTAssertEqual(sut.items.count, 1)
+        XCTAssertEqual(sut.items.first?.state, .probing)
+        XCTAssertEqual(sut.items.first?.url, "https://example.com/playlist")
+
+        await gate.open()
+        await task.value
+
+        XCTAssertEqual(sut.items.count, 2)
+        XCTAssertTrue(sut.items.allSatisfy { $0.state == .ready })
+    }
+
+    func test_add_probeFailure_marksPlaceholderFailedWithMessage() async {
+        let (sut, prober, _) = makeSUT()
+        prober.errorToThrow = MediaProbeError.ytDlpFailed(exitCode: 1, message: "ERROR: Video unavailable")
+
+        await sut.add(url: "https://example.com/bad")
+
+        XCTAssertEqual(sut.items.count, 1)
+        XCTAssertEqual(sut.items[0].state, .failed)
+        XCTAssertEqual(sut.items[0].url, "https://example.com/bad")
+        XCTAssertEqual(sut.items[0].errorMessage, "ERROR: Video unavailable")
+    }
+
     func test_add_appliesDefaultFormatFromSettings() async {
         let prober = FakeProber()
         let settings = makeEphemeralSettings()

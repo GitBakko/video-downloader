@@ -8,6 +8,11 @@ public final class QueueStore {
     public private(set) var items: [DownloadItem] = []
     public private(set) var isQueuePaused: Bool = false
 
+    /// Invoked on the main actor each time an item reaches `.completed`. The app
+    /// sets this to post the completion notification + sound, so items that
+    /// finish while the window is closed are still announced (spec §5.2 / §9).
+    public var onItemFinished: ((DownloadItem) -> Void)?
+
     private let prober: MediaProbing
     private let engine: Downloading
     private let binaries: BinaryProviding
@@ -24,17 +29,30 @@ public final class QueueStore {
     // MARK: - Adding
 
     public func add(url: String) async {
+        // Show a `.probing` placeholder immediately so the row appears (with a
+        // "Lettura formati…" spinner) and the list is never empty during a slow
+        // yt-dlp probe (spec §3.2 / §4).
+        let placeholder = DownloadItem(url: url, state: .probing)
+        let placeholderID = placeholder.id
+        items.append(placeholder)
         do {
             var probed = try await prober.probe(url: url)
             // Newly-added items inherit the user's default format (spec §5.2).
             for i in probed.indices { probed[i].selectedFormat = settings.defaultFormat }
-            items.append(contentsOf: probed)
+            // Replace the placeholder with the parsed `.ready` items.
+            if let index = items.firstIndex(where: { $0.id == placeholderID }) {
+                items.replaceSubrange(index...index, with: probed)
+            } else {
+                items.append(contentsOf: probed)
+            }
         } catch {
-            // A probe failure never throws out of add; it surfaces as one
-            // failed placeholder so the user sees why nothing was added.
-            var failed = DownloadItem(url: url, state: .failed)
-            failed.errorMessage = (error as? DownloadError)?.userMessage ?? error.localizedDescription
-            items.append(failed)
+            // A probe failure never throws out of add; the placeholder becomes a
+            // failed row so the user sees why nothing was added.
+            let message = (error as? DownloadError)?.userMessage ?? error.localizedDescription
+            updateItem(placeholderID) {
+                $0.state = .failed
+                $0.errorMessage = message
+            }
         }
     }
 
@@ -123,6 +141,11 @@ public final class QueueStore {
                 $0.speed = nil
                 $0.eta = nil
                 $0.outputPath = outputPath
+            }
+            // Fire the completion hook on the main actor so notifications are
+            // posted even when the window is closed (spec §5.2 / §9).
+            if let finished = items.first(where: { $0.id == id }) {
+                onItemFinished?(finished)
             }
         }
     }

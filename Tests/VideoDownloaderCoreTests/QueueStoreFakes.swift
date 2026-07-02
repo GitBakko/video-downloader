@@ -6,11 +6,32 @@ final class FakeProber: MediaProbing, @unchecked Sendable {
     var itemsToReturn: [DownloadItem] = []
     var errorToThrow: Error?
     private(set) var probedURLs: [String] = []
+    /// Optional gate: when set, `probe` suspends until the test releases it,
+    /// letting the test observe the intermediate `.probing` placeholder.
+    var gate: ProbeGate?
 
     func probe(url: String) async throws -> [DownloadItem] {
         probedURLs.append(url)
+        if let gate { await gate.wait() }
         if let error = errorToThrow { throw error }
         return itemsToReturn
+    }
+}
+
+/// A one-shot async gate for tests: `probe` awaits `wait()`; the test calls `open()`.
+actor ProbeGate {
+    private var opened = false
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    func wait() async {
+        if opened { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        opened = true
+        continuation?.resume()
+        continuation = nil
     }
 }
 

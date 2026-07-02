@@ -1,6 +1,7 @@
 import XCTest
 @testable import VideoDownloaderCore
 
+@MainActor
 final class SettingsStoreTests: XCTestCase {
 
     /// A throwaway, isolated UserDefaults suite so tests never touch real prefs.
