@@ -53,4 +53,28 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertTrue(sut.items.allSatisfy { $0.selectedFormat == .audio(.best) },
                       "newly-added items inherit settings.defaultFormat")
     }
+
+    func test_startAll_promotesExactlyTwoAndQueuesTheRest() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+
+        sut.startAll()
+
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
+        XCTAssertEqual(sut.items.filter { $0.state == .queued }.count, 1)
+        XCTAssertEqual(engine.startedIDs.count, 2, "only the two promoted items are handed to the engine")
+    }
+
+    func test_startDownload_promotesSingleReadyItem() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(1)
+        await sut.add(url: "https://example.com/v")
+        let id = sut.items[0].id
+
+        sut.startDownload(id)
+
+        XCTAssertEqual(sut.items[0].state, .downloading)
+        XCTAssertEqual(engine.startedIDs, [id])
+    }
 }

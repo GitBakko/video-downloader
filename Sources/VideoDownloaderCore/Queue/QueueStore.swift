@@ -37,6 +37,74 @@ public final class QueueStore {
         }
     }
 
+    // MARK: - Starting
+
+    private let maxConcurrent = 2
+    private var runningTasks: [UUID: Task<Void, Never>] = [:]
+
+    public func startDownload(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }), item.state == .ready else { return }
+        updateItem(id) { $0.state = .queued }
+        promoteQueued()
+    }
+
+    public func startAll() {
+        for item in items where item.state == .ready {
+            updateItem(item.id) { $0.state = .queued }
+        }
+        promoteQueued()
+    }
+
+    // MARK: - Promotion
+
+    private var activeSlots: Int {
+        items.filter { $0.state == .downloading || $0.state == .processing }.count
+    }
+
+    private func promoteQueued() {
+        while activeSlots < maxConcurrent,
+              let next = items.first(where: { $0.state == .queued }) {
+            updateItem(next.id) { $0.state = .downloading }
+            launch(next.id)
+        }
+    }
+
+    private func launch(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        let stream = engine.events(for: item, arguments: arguments(for: item))
+        let task = Task { @MainActor in
+            do {
+                for try await event in stream {
+                    self.handle(event, for: id)
+                }
+            } catch is CancellationError {
+                self.updateItem(id) { $0.state = .cancelled }
+            } catch {
+                self.updateItem(id) {
+                    $0.state = .failed
+                    $0.errorMessage = (error as? DownloadError)?.userMessage ?? error.localizedDescription
+                }
+            }
+            self.runningTasks[id] = nil
+            // (Task 6.6 adds promoteQueued() here to fill the freed slot.)
+        }
+        runningTasks[id] = task
+    }
+
+    private func handle(_ event: DownloadEvent, for id: UUID) {
+        // (Filled in by Tasks 6.6 and 6.10.)
+    }
+
+    private func arguments(for item: DownloadItem) -> [String] {
+        // The ONLY coupling to Phase 3's ArgumentBuilder. FakeEngine ignores
+        // these in tests; adjust here if the real signature differs.
+        ArgumentBuilder.downloadArguments(
+            for: item.selectedFormat,
+            item: item,
+            settings: settings.downloadSettings,
+            ffmpegDirectory: binaries.ffmpegDirectory)
+    }
+
     // MARK: - Helpers
 
     private func updateItem(_ id: UUID, _ mutate: (inout DownloadItem) -> Void) {
