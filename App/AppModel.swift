@@ -24,7 +24,6 @@ final class AppModel {
     var urlField: String = ""
     var updatingYtDlp: Bool = false
     private var lastClipboardSuggestion: String?
-    private var notifiedItemIDs: Set<UUID> = []
     private let notificationPresenter = NotificationForegroundPresenter()
 
     init() {
@@ -35,6 +34,11 @@ final class AppModel {
         self.settings = settings
         self.binaries = binaries
         self.queue = QueueStore(prober: prober, engine: engine, binaries: binaries, settings: settings)
+        // Announce completions from the queue itself, so items that finish while
+        // the window is closed are still notified (spec §5.2 / §9).
+        self.queue.onItemFinished = { [weak self] item in
+            self?.postFinishedNotification(for: item)
+        }
     }
 
     // MARK: Bootstrap (spec §5.1)
@@ -50,7 +54,10 @@ final class AppModel {
         }
     }
 
-    func retrySetup() { Task { await bootstrap() } }
+    func retrySetup() {
+        guard case .failed = setupPhase else { return }
+        Task { await bootstrap() }
+    }
 
     // MARK: Add URLs (spec §5.2 — supports one-or-more, one per line)
     func addFromField() {
@@ -91,15 +98,20 @@ final class AppModel {
     func requestNotificationAuthorization() async {
         let center = UNUserNotificationCenter.current()
         center.delegate = notificationPresenter
+        // Register the "Mostra nel Finder" action shown on completion banners.
+        let reveal = UNNotificationAction(
+            identifier: NotificationForegroundPresenter.revealActionID,
+            title: "Mostra nel Finder",
+            options: [.foreground]
+        )
+        let category = UNNotificationCategory(
+            identifier: NotificationForegroundPresenter.completedCategoryID,
+            actions: [reveal],
+            intentIdentifiers: [],
+            options: []
+        )
+        center.setNotificationCategories([category])
         _ = try? await center.requestAuthorization(options: [.alert, .sound])
-    }
-
-    /// Fires a notification + sound once for each item that has newly reached `.completed`.
-    func handleCompletions() {
-        for item in queue.items where item.state == .completed && !notifiedItemIDs.contains(item.id) {
-            notifiedItemIDs.insert(item.id)
-            postFinishedNotification(for: item)
-        }
     }
 
     private func postFinishedNotification(for item: DownloadItem) {
@@ -107,6 +119,10 @@ final class AppModel {
         content.title = "Download completato"
         content.body = item.title ?? item.url
         content.sound = .default
+        content.categoryIdentifier = NotificationForegroundPresenter.completedCategoryID
+        if let path = item.outputPath?.path {
+            content.userInfo = [NotificationForegroundPresenter.outputPathKey: path]
+        }
         let request = UNNotificationRequest(identifier: item.id.uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
         NSSound(named: NSSound.Name("Glass"))?.play()
@@ -131,13 +147,31 @@ final class AppModel {
     }
 }
 
-/// Lets notifications appear while the app is frontmost.
+/// Lets notifications appear while the app is frontmost and reveals the finished
+/// file in the Finder when the notification (or its action) is activated.
 final class NotificationForegroundPresenter: NSObject, UNUserNotificationCenterDelegate {
+    static let completedCategoryID = "DOWNLOAD_COMPLETED"
+    static let revealActionID = "REVEAL_IN_FINDER"
+    static let outputPathKey = "outputPath"
+
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         completionHandler([.banner, .sound])
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let action = response.actionIdentifier
+        if action == Self.revealActionID || action == UNNotificationDefaultActionIdentifier,
+           let path = response.notification.request.content.userInfo[Self.outputPathKey] as? String {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        }
+        completionHandler()
     }
 }
