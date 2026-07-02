@@ -59,3 +59,29 @@ public struct BinaryURLResolver: Sendable {
         return URL(string: "https://github.com/eugeneware/ffmpeg-static/releases/latest/download/\(asset)")!
     }
 }
+
+// MARK: - BinaryLayout (pure path building)
+
+public struct BinaryLayout: Sendable {
+    /// Root of the app's managed folder (e.g. .../Application Support/VideoDownloader).
+    public let supportDirectory: URL
+
+    public init(supportDirectory: URL) {
+        self.supportDirectory = supportDirectory
+    }
+
+    /// Default location under the user's Library (spec §3.1).
+    public static func standard(fileManager: FileManager = .default) -> BinaryLayout {
+        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return BinaryLayout(supportDirectory: base.appendingPathComponent("VideoDownloader", isDirectory: true))
+    }
+
+    /// `.../VideoDownloader/bin` — passed to yt-dlp as `--ffmpeg-location`.
+    public var binDirectory: URL {
+        supportDirectory.appendingPathComponent("bin", isDirectory: true)
+    }
+
+    public var ytDlpURL: URL { binDirectory.appendingPathComponent("yt-dlp", isDirectory: false) }
+    public var ffmpegURL: URL { binDirectory.appendingPathComponent("ffmpeg", isDirectory: false) }
+    public var ffprobeURL: URL { binDirectory.appendingPathComponent("ffprobe", isDirectory: false) }
+}
