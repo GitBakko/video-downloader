@@ -16,7 +16,8 @@ enum ArgumentBuilder {
             args += ["-f", videoSelector(for: quality)]
             args += ["--merge-output-format", "mp4", "--remux-video", "mp4"]
         case .audio:
-            args += ["-f", "ba/b"]              // refined in Task 3.4
+            // v1: MP3 best only.
+            args += ["-f", "ba/b", "-x", "--audio-format", "mp3"]
         case .specific(let formatID):
             args += ["-f", formatID]            // refined in Task 3.5
         }

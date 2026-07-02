@@ -113,4 +113,22 @@ final class ArgumentBuilderTests: XCTestCase {
                 + commonTail()
         )
     }
+
+    // MARK: - .audio(.best)
+
+    func test_audio_best_extractsMp3_noRemux() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .audio(.best),
+            item: item(),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(
+            args,
+            ["-f", "ba/b", "-x", "--audio-format", "mp3"] + commonTail()
+        )
+        // Audio must NOT carry the video merge/remux flags.
+        XCTAssertFalse(args.contains("--remux-video"))
+        XCTAssertFalse(args.contains("--merge-output-format"))
+    }
 }
