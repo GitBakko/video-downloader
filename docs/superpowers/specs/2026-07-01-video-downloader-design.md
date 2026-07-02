@@ -99,7 +99,7 @@ DownloadItem
 ├─ availableFormats: [MediaFormat]
 ├─ selectedFormat: FormatChoice   // default o override; editabile finché ready/queued
 ├─ state: DownloadState
-├─ stage: String?            // etichetta fase corrente ("Scarico video", "Unione…")
+├─ stage: String?            // token di fase grezzo da yt-dlp; NON mostrato come etichetta (la UI deriva il label dallo stato)
 ├─ progress: Double?          // 0…1, nil quando indeterminato (processing)
 ├─ speed: String?            // es. "4.2 MB/s"
 ├─ eta: String?             // es. "0:38"
@@ -135,7 +135,7 @@ FormatChoice = enum {
 
 **Assi separati:** video e audio hanno **qualità distinte** (niente più `.preset(audioOnly, p720)` senza senso). In v1 l'audio è sempre **MP3 best**; l'enum `AudioQuality` resta estendibile (es. 192/128 kbps) in futuro.
 
-**Progresso multi-stream:** un download `bv*+ba` fa due passate 0→100% (prima video, poi audio); il post-processing (unione/embed/estrazione) non emette percentuali. Per evitare che la barra "torni a 0" o si blocchi al 100%: durante `downloading` la barra riflette la passata corrente con l'etichetta `stage` ("Scarico video/audio"); all'inizio del post-processing l'item passa a `processing` con indicatore **indeterminato**.
+**Progresso multi-stream (etichette generiche, derivate dallo stato):** un download `bv*+ba` fa due passate 0→100% (prima video, poi audio), e fra la passata video e quella audio la barra può visibilmente "tornare a 0"; il post-processing (unione/embed/estrazione) non emette percentuali. Per questo l'etichetta è legata allo **stato** dell'item e non all'output grezzo di yt-dlp: durante `downloading` la barra mostra la percentuale di download corrente con un'etichetta generica **"Scaricamento…"**; quando inizia il post-processing l'item passa a `processing` con un indicatore **indeterminato** etichettato **"Elaborazione…"** (così la UI non sembra mai bloccata e non serve distinguere le singole passate).
 
 **Persistenza:** la coda vive **in memoria** durante la sessione (nessun ripristino dopo la chiusura in v1). Solo le **impostazioni** (cartella, formato di default, extra) sono persistite in UserDefaults.
 
@@ -152,7 +152,7 @@ FormatChoice = enum {
 1. L'utente incolla un URL (o l'app lo **propone dagli appunti** all'avvio/riattivazione, senza sovrascrivere testo digitato) → *Aggiungi*.
 2. `MediaProbe` esegue un unico `yt-dlp -J` → l'item (o, per playlist, **tutti** gli item) compare in stato `ready` con titolo e miniatura.
 3. Vale il **formato di default**; finché l'item è `ready`/`queued` l'utente può espandere la riga e scegliere un preset diverso o un formato specifico (modalità ibrida).
-4. L'utente preme **"Scarica"** sulla riga (o **"Scarica tutti"**). L'item va `queued` e poi `downloading` appena c'è uno slot libero (tetto **2 in parallelo**). Barra, `stage`, velocità, ETA in riga; poi `processing` per l'unione/embed.
+4. L'utente preme **"Scarica"** sulla riga (o **"Scarica tutti"**). L'item va `queued` e poi `downloading` appena c'è uno slot libero (tetto **2 in parallelo**). In riga: barra con etichetta generica "Scaricamento…", velocità, ETA; poi `processing` ("Elaborazione…", indeterminato) per l'unione/embed.
 5. A fine: **notifica + suono**, copertina/metadati incorporati (se attivo), "Mostra nel Finder". File in `<cartella>/<titolo> [<id>].<ext>`.
 
 ### 5.3 Aggiornamento di yt-dlp

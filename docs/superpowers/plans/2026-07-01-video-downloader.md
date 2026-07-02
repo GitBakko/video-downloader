@@ -133,6 +133,8 @@ let package = Package(
 )
 ```
 
+> **Expected warning until Phase 2:** because `exclude: ["Fixtures"]` points at a directory that does not exist yet, every `swift build`/`swift test` from Phase 0 through Phase 1b prints `warning: Invalid Exclude '/Users/bakko/Develop/Swift/VideoDownloader/Tests/VideoDownloaderCoreTests/Fixtures': File not found.`. This is **expected and harmless** — the build/test still succeeds (exit 0). It disappears once Phase 2 (Task 2.1) creates the `Fixtures/` directory with the first JSON fixture.
+
 - [ ] **Create the smoke test** `Tests/VideoDownloaderCoreTests/ScaffoldingTests.swift` with EXACTLY this content:
 
 ```swift
@@ -417,7 +419,7 @@ Phase 0 already created and committed the single authoritative root `Package.swi
 
 - [ ] Confirm the Phase-0 `Package.swift` is present and building (do **not** recreate it — Phase 0 is its single owner):
   - Run: `cd /Users/bakko/Develop/Swift/VideoDownloader && swift build`
-  - Expected: `Build complete!` (the Phase-0 `Placeholder.swift` keeps the target non-empty).
+  - Expected: `Build complete!` (the Phase-0 `Placeholder.swift` keeps the target non-empty). The `warning: Invalid Exclude '.../Tests/VideoDownloaderCoreTests/Fixtures': File not found.` is still expected here (the `Fixtures/` dir doesn't exist until Phase 2) — the build still succeeds (exit 0).
 
 - [ ] Write the first failing test at `Tests/VideoDownloaderCoreTests/DownloadStateTests.swift`:
 
@@ -959,7 +961,7 @@ public protocol Downloading {
 
 - [ ] Verify it builds:
   - `swift build`
-  - Expected: **PASS** (`Build complete!`).
+  - Expected: **PASS** (`Build complete!`). (The `Invalid Exclude '.../Fixtures'` warning from Task 0.2 is still expected until Phase 2 — build exit 0.)
 - [ ] Commit:
   - `git add Sources/VideoDownloaderCore/Download/DownloadEvent.swift`
   - `git commit -m "feat(core): add shared DownloadEvent + Downloading contract"`
@@ -1516,10 +1518,10 @@ swift test --filter MediaProbeParserTests/testPlaylistExpandsToOneReadyItemPerEn
 ```
 Expected: **FAIL** — `XCTAssertEqual failed: ("1") is not equal to ("3")`.
 
-- [ ] Extend `Sources/VideoDownloaderCore/Probe/YtDlpJSON.swift` — add the recursive `entries` field to `YtDlpInfo` (add the property and its coding key):
+- [ ] Extend `Sources/VideoDownloaderCore/Probe/YtDlpJSON.swift` — add the recursive `entries` field to `YtDlpInfo` (add the property and its coding key). Note the **element is optional** (`YtDlpInfo?`): real playlists contain unavailable/private videos that `yt-dlp -J` emits as JSON `null` entries, so the array must decode them rather than fail:
 
 ```swift
-    let entries: [YtDlpInfo]?
+    let entries: [YtDlpInfo?]?
 ```
 and add `entries` to the `CodingKeys` list so the `case` line reads:
 ```swift
@@ -1532,11 +1534,15 @@ and add `entries` to the `CodingKeys` list so the `case` line reads:
     public static func items(fromDumpJSON data: Data) throws -> [DownloadItem] {
         let info = try JSONDecoder().decode(YtDlpInfo.self, from: data)
         if info.type == "playlist", let entries = info.entries {
-            return entries.map { makeItem(from: $0) }   // one .ready item per entry
+            // Skip `null` entries (unavailable/private videos) so one dead video
+            // never fails the whole probe → one .ready item per surviving entry.
+            return entries.compactMap { $0 }.map { makeItem(from: $0) }
         }
         return [makeItem(from: info)]
     }
 ```
+
+> **Robustness (null entries):** because a public playlist routinely contains a few unavailable/private videos that `yt-dlp -J` reports as JSON `null`, `entries` is typed `[YtDlpInfo?]?` and the branch `compactMap`s the `nil`s away before mapping. This means a single dead video is silently skipped instead of aborting the probe. The `playlist.json` fixture below contains no `null` entries, so the expected count stays **3** — the compaction is exercised in production, not by this fixture.
 
 - [ ] Create the fixture `Tests/VideoDownloaderCoreTests/Fixtures/playlist.json`:
 
@@ -2146,7 +2152,7 @@ Locks in the `else` branch: a progressive format (has audio) and an unknown `for
 
 ## Phase 4 — Progress line parser (Download/ProgressParser.swift)
 
-### Task 4.1: Standard progress line → `.progress(percent, speed, eta, stage:"download")`
+### Task 4.1: Standard progress line → `.progress(percent, speed, eta, stage: nil)`
 
 **Preconditions (owned by earlier phases — do NOT create/duplicate here):** the root `Package.swift` with the `VideoDownloaderCore` library target and the `VideoDownloaderCoreTests` XCTest target already exist, and the shared `DownloadEvent` enum (`Sources/VideoDownloaderCore/Download/DownloadEvent.swift`) is already defined:
 ```swift
@@ -2158,7 +2164,7 @@ public enum DownloadEvent {
 ```
 If `swift build` reports `cannot find type 'DownloadEvent' in scope`, Phase 1b Task 1b.1 (its single owner) has not run yet — this section must be sequenced after it. `DownloadEvent` has associated values and is **not** `Equatable`, so tests destructure with `if case`/`guard case` (never `==` on the whole event). Tests use `@testable import VideoDownloaderCore` so the parser can stay `internal` (it is consumed only by `DownloadEngine` inside the module).
 
-**Behaviour:** a line matching our `--progress-template` (spec §6) `%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s` — yt-dlp strips the `download:` type prefix, so real stdout lines are the bare `PERCENT|SPEED|ETA` body — is parsed into `.progress`, with percent normalised to a `Double` in `0…1`, `speed`/`eta` trimmed, and `stage` always `"download"`. A line is recognised by having exactly three `|`-separated fields; anything else returns `nil`.
+**Behaviour:** a line matching our `--progress-template` (spec §6) `%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s` — yt-dlp strips the `download:` type prefix, so real stdout lines are the bare `PERCENT|SPEED|ETA` body — is parsed into `.progress`, with percent normalised to a `Double` in `0…1`, `speed`/`eta` trimmed, and `stage` always `nil` — the parser does **not** label the download pass (there is no reliable per-pass marker in the raw stream, and a `bv*+ba` download resets the bar between the video and audio passes). The user-facing label ("Scaricamento…") is derived by the UI from the item's `state`, not from this token. A line is recognised by having exactly three `|`-separated fields; anything else returns `nil`.
 
 - [ ] Create `Tests/VideoDownloaderCoreTests/ProgressParserTests.swift` with the shared assertion helpers and the first behaviours:
 ```swift
@@ -2190,7 +2196,7 @@ final class ProgressParserTests: XCTestCase {
         }
         XCTAssertEqual(speed, expectedSpeed, file: file, line: line)
         XCTAssertEqual(eta, expectedETA, file: file, line: line)
-        XCTAssertEqual(stage, "download", file: file, line: line)
+        XCTAssertNil(stage, "parser must not label the pass; stage is nil", file: file, line: line)
     }
 
     private func assertIgnored(_ raw: String, file: StaticString = #filePath, line: UInt = #line) {
@@ -2208,12 +2214,12 @@ final class ProgressParserTests: XCTestCase {
         )
     }
 
-    func testStageIsAlwaysDownload() {
+    func testProgressStageIsNil() {
         guard case let .progress(_, _, _, stage)? =
             ProgressParser.parse(line: " 1.0%|1.00MiB/s|10:00") else {
             return XCTFail("expected .progress")
         }
-        XCTAssertEqual(stage, "download")
+        XCTAssertNil(stage)   // parser does not label the pass; UI derives label from state
     }
 
     func testIgnoresNonMatchingLines() {
@@ -2242,7 +2248,7 @@ enum ProgressParser {
             percent: parsePercent(fields[0]),
             speed: trimmedField(fields[1]),
             eta: trimmedField(fields[2]),
-            stage: "download"
+            stage: nil
         )
     }
 
@@ -2322,7 +2328,7 @@ enum ProgressParser {
             percent: parsePercent(fields[0]),
             speed: normalize(fields[1]),
             eta: normalize(fields[2]),
-            stage: "download"
+            stage: nil
         )
     }
 
@@ -2400,7 +2406,7 @@ enum ProgressParser {
             percent: parsePercent(fields[0]),
             speed: normalize(fields[1]),
             eta: normalize(fields[2]),
-            stage: "download"
+            stage: nil
         )
     }
 
@@ -2501,7 +2507,7 @@ enum ProgressParser {
             percent: parsePercent(fields[0]),
             speed: normalize(fields[1]),
             eta: normalize(fields[2]),
-            stage: "download"
+            stage: nil
         )
     }
 
@@ -2615,7 +2621,7 @@ enum ProgressParser {
             percent: parsePercent(fields[0]),
             speed: normalize(fields[1]),
             eta: normalize(fields[2]),
-            stage: "download"
+            stage: nil
         )
     }
 
@@ -3518,6 +3524,8 @@ Drive these from a throwaway `@main` executable or an XCTest guarded by an env f
 
 ### Task 6.4 — QueueStore `add(url:)` → `.ready` items (TDD) + test doubles
 
+> **Note on `.probing`:** `add(url:)` *awaits* the probe and then appends the resulting items already in `.ready`, so in v1 the queue never actually surfaces a `.probing` item. `DownloadState.probing` is kept intentionally — for model completeness and to leave room for future lazy/streaming probing (spec §3.2 "probe lazy") — but it is not part of the add path today.
+
 - [ ] Create the shared test doubles `Tests/VideoDownloaderCoreTests/QueueStoreFakes.swift`:
 
 ```swift
@@ -4164,12 +4172,13 @@ public final class QueueStore {
         sut.startDownload(id)
         XCTAssertEqual(sut.items[0].state, .downloading)
 
-        engine.emitProgress(id, percent: 0.5, speed: "4.2 MB/s", eta: "0:38", stage: "Scarico video")
+        engine.emitProgress(id, percent: 0.5, speed: "4.2 MB/s", eta: "0:38", stage: nil)
         await waitUntil { sut.items[0].progress == 0.5 }
         XCTAssertEqual(sut.items[0].state, .downloading)
         XCTAssertEqual(sut.items[0].speed, "4.2 MB/s")
         XCTAssertEqual(sut.items[0].eta, "0:38")
-        XCTAssertEqual(sut.items[0].stage, "Scarico video")
+        // No pass label is asserted: the real pipeline produces stage == nil and the
+        // UI derives the "Scaricamento…" caption from `state`, not from `stage`.
 
         engine.emitProcessing(id)
         await waitUntil { sut.items[0].state == .processing }
@@ -4201,6 +4210,7 @@ public final class QueueStore {
                 $0.progress = nil   // indeterminate
                 $0.speed = nil
                 $0.eta = nil
+                $0.stage = nil      // UI shows generic "Elaborazione…" from state
             }
         case let .finished(outputPath):
             updateItem(id) {
@@ -4878,7 +4888,7 @@ git commit -m "feat(app): add FormatPickerView (presets + tutti i formati table)
 
 ### Task 7.5 — `DownloadRowView`: thumbnail, state/progress, actions, expandable
 
-**Goal:** One list row per `DownloadItem` (spec §3.6/§4/§5.2): thumbnail, title, state + progress/stage/speed/ETA, `Scarica`/`Annulla`/`Riprova`/`Mostra nel Finder`, and an expandable format editor.
+**Goal:** One list row per `DownloadItem` (spec §3.6/§4/§5.2): thumbnail, title, state + progress/speed/ETA (with a generic, state-derived label — never the raw `item.stage`), `Scarica`/`Annulla`/`Riprova`/`Mostra nel Finder`, and an expandable format editor.
 
 - [ ] Create `App/Views/DownloadRowView.swift`:
 
@@ -4951,10 +4961,9 @@ struct DownloadRowView: View {
     private var statusLine: some View {
         HStack(spacing: 6) {
             Circle().fill(stateColor).frame(width: 8, height: 8)
+            // Generic, state-derived label only — never the raw yt-dlp `item.stage`
+            // token (a bv*+ba download resets the bar between the video/audio passes).
             Text(stateLabel).font(.caption).foregroundStyle(.secondary)
-            if let stage = item.stage, item.state == .downloading {
-                Text("· \(stage)").font(.caption).foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -4969,6 +4978,7 @@ struct DownloadRowView: View {
                     ProgressView().controlSize(.small)
                 }
                 HStack(spacing: 10) {
+                    Text("Scaricamento…")   // generic label from state, not item.stage
                     if let s = item.speed { Text(s) }
                     if let e = item.eta { Text("ETA \(e)") }
                 }
@@ -4977,7 +4987,7 @@ struct DownloadRowView: View {
         case .processing:
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
-                Text(item.stage ?? "Elaborazione…").font(.caption).foregroundStyle(.secondary)
+                Text("Elaborazione…").font(.caption).foregroundStyle(.secondary)
             }
         case .failed:
             if let msg = item.errorMessage {
@@ -5063,14 +5073,14 @@ xcodebuild -project /Users/bakko/Develop/Swift/VideoDownloader/App/VideoDownload
 Expected: `** BUILD SUCCEEDED **`
 
 - [ ] **Manual verification** (fully exercised after 7.6 wires rows into the list):
-  - `ready` → shows blue "Scarica" button; `downloading` → determinate bar + stage + speed + ETA; `processing` → indeterminate spinner (bar does not snap to 0 or freeze at 100%, spec §4).
+  - `ready` → shows blue "Scarica" button; `downloading` → determinate bar + generic "Scaricamento…" label + speed + ETA (never the raw `item.stage`); `processing` → indeterminate spinner + "Elaborazione…" (bar does not snap to 0 or freeze at 100%, spec §4).
   - `completed` → "Mostra nel Finder"; `failed` → red message + "Riprova" (+ "Aggiorna yt-dlp" when the message hints staleness).
   - The "Formato" disclosure is expandable and disabled once the item passes `queued`.
 
 - [ ] Commit.
 ```
 git add App/Views/DownloadRowView.swift
-git commit -m "feat(app): add DownloadRowView (thumbnail, progress/stage, actions, expandable format)"
+git commit -m "feat(app): add DownloadRowView (thumbnail, state-derived progress label, actions, expandable format)"
 ```
 
 ---
@@ -5515,7 +5525,7 @@ git commit -m "feat(app): notify + sound on download completion via UNUserNotifi
 - [ ] Turn Wi-Fi off, delete the bin folder, launch → `SetupView` shows a clear failure message + **Riprova**; re-enable Wi-Fi and press **Riprova** → proceeds (spec §7 row 1).
 
 **§5.2 — Add & download (happy paths)**
-- [ ] Copy a standard single-video URL, launch/re-activate → URL pre-filled; **Aggiungi** → one `ready` item with title + thumbnail. Press **Scarica** → `queued`→`downloading` (bar + stage + speed + ETA) → `processing` (indeterminate) → `completed`. File lands at `<destination>/<titolo> [<id>].<ext>` and is a real MP4 (remux). Notification + sound fire; **Mostra nel Finder** selects the file.
+- [ ] Copy a standard single-video URL, launch/re-activate → URL pre-filled; **Aggiungi** → one `ready` item with title + thumbnail. Press **Scarica** → `queued`→`downloading` (bar + "Scaricamento…" + speed + ETA) → `processing` ("Elaborazione…", indeterminate) → `completed`. File lands at `<destination>/<titolo> [<id>].<ext>` and is a real MP4 (remux). Notification + sound fire; **Mostra nel Finder** selects the file.
 - [ ] Add a **playlist** URL → a single probe expands into many `ready` items. Press **Scarica tutti** → at most **2** are `downloading` at once, the rest `queued`; they drain in order (spec §5.2 / concurrency cap).
 - [ ] Add a video, switch default/override to **Audio** → output is an `.mp3` with embedded cover + metadata (verifies ffprobe present). Enable/disable "Incorpora copertina e metadati" in Settings and confirm the difference.
 - [ ] Expand a row, open **Tutti i formati**, pick a **solo-video** (acodec none) format → output still has audio (not muted), MP4 (spec §6 `.specific` + bestaudio).
