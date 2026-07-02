@@ -136,4 +136,40 @@ final class ProgressParserTests: XCTestCase {
         assertProgress(" 50.0%|2.00MiB/s|00:05",
                        percent: 0.5, speed: "2.00MiB/s", eta: "00:05")
     }
+
+    // MARK: - 4.5 Percent clamped to 0…1 + realistic multi-line sequence
+
+    func testClampsOutOfRangePercent() {
+        assertProgress("150.0%|1.00MiB/s|00:00",
+                       percent: 1.0, speed: "1.00MiB/s", eta: "00:00")
+    }
+
+    func testParsesRealisticTwoPassSequence() {
+        // A `bv*+ba` download: video pass, audio pass, then merge + embed.
+        let log = [
+            "   0.0%|Unknown B/s|Unknown",                                // video pass starts
+            "  42.1%|  3.10MiB/s|00:12",
+            " 100.0%|  4.00MiB/s|00:00",                                  // video pass done
+            "   0.0%|Unknown B/s|Unknown",                                // audio pass starts
+            "  88.0%|  1.20MiB/s|00:01",
+            " 100.0%|  1.30MiB/s|00:00",                                  // audio pass done
+            "[Merger] Merging formats into \"out.mp4\"",                  // processing
+            "[EmbedThumbnail] ffmpeg: embedding thumbnail in \"out.mp4\"",
+            "[deleting original file out.f137.mp4 (pass -k to keep)]"     // ignored → nil
+        ]
+        let events = log.map { ProgressParser.parse(line: $0) }
+
+        let progressCount = events.filter { if case .progress = $0 { return true } else { return false } }.count
+        let processingCount = events.filter { if case .processing = $0 { return true } else { return false } }.count
+        let ignoredCount = events.filter { $0 == nil }.count
+
+        XCTAssertEqual(progressCount, 6)
+        XCTAssertEqual(processingCount, 2)
+        XCTAssertEqual(ignoredCount, 1)
+
+        // First video-pass tick: 0%, unknown speed/eta.
+        assertProgress(log[0], percent: 0.0, speed: nil, eta: nil)
+        // Audio pass completes at 100%.
+        assertProgress(log[5], percent: 1.0, speed: "1.30MiB/s", eta: "00:00")
+    }
 }

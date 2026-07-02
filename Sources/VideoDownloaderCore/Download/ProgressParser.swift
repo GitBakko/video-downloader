@@ -49,11 +49,11 @@ enum ProgressParser {
         return trimmed
     }
 
-    /// "  12.3%" → 0.123. Unknown / unparseable → `nil`.
+    /// "  12.3%" → 0.123, clamped to 0…1. Unknown / unparseable → `nil`.
     private static func parsePercent(_ raw: String) -> Double? {
         var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasSuffix("%") { trimmed.removeLast() }
         guard let value = normalize(trimmed), let number = Double(value) else { return nil }
-        return number / 100.0
+        return min(max(number / 100.0, 0.0), 1.0)
     }
 }
