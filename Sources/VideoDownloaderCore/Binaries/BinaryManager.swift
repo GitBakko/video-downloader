@@ -115,3 +115,109 @@ public func pendingBinaryTasks(
 ) -> [BinaryDownloadTask] {
     tasks.filter { !isInstalled($0.destination) }
 }
+
+// MARK: - BinaryProviding protocol (owned by this file)
+
+public protocol BinaryProviding {
+    var ytDlpURL: URL { get }
+    var ffmpegDirectory: URL { get }
+    var ytDlpVersion: String? { get }
+    func ensureInstalled() async throws
+    func updateYtDlp() async throws
+}
+
+public enum BinaryManagerError: Error, Equatable {
+    case downloadFailed(url: URL, status: Int)
+}
+
+// MARK: - BinaryManager (side effects: network + filesystem + Process)
+
+public final class BinaryManager: BinaryProviding {
+    private let layout: BinaryLayout
+    private let resolver: BinaryURLResolver
+    private let arch: HostArchitecture
+    private let fileManager: FileManager
+    private let session: URLSession
+
+    public private(set) var ytDlpVersion: String?
+
+    public init(
+        layout: BinaryLayout = .standard(),
+        resolver: BinaryURLResolver = BinaryURLResolver(),
+        arch: HostArchitecture = .current(),
+        fileManager: FileManager = .default,
+        session: URLSession = .shared
+    ) {
+        self.layout = layout
+        self.resolver = resolver
+        self.arch = arch
+        self.fileManager = fileManager
+        self.session = session
+    }
+
+    public var ytDlpURL: URL { layout.ytDlpURL }
+    public var ffmpegDirectory: URL { layout.binDirectory }
+
+    /// Spec §3.1 / §5.1: download any missing binary for the host arch, then
+    /// make each runnable (unquarantine + execute bit + ad-hoc sign on arm64).
+    public func ensureInstalled() async throws {
+        try fileManager.createDirectory(at: layout.binDirectory, withIntermediateDirectories: true)
+        let all = resolver.installTasks(layout: layout, arch: arch)
+        let pending = pendingBinaryTasks(all) { self.fileManager.isExecutableFile(atPath: $0.path) }
+        for task in pending {
+            try await download(task.remote, to: task.destination)
+        }
+        ytDlpVersion = try? readYtDlpVersion()
+    }
+
+    /// Spec §5.3: re-download the latest yt-dlp and refresh the version.
+    public func updateYtDlp() async throws {
+        try fileManager.createDirectory(at: layout.binDirectory, withIntermediateDirectories: true)
+        try await download(resolver.ytDlpDownloadURL(), to: layout.ytDlpURL)
+        ytDlpVersion = try? readYtDlpVersion()
+    }
+
+    // MARK: Side effects
+
+    private func download(_ remote: URL, to destination: URL) async throws {
+        let (tempURL, response) = try await session.download(from: remote)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw BinaryManagerError.downloadFailed(url: remote, status: http.statusCode)
+        }
+        if fileManager.fileExists(atPath: destination.path) {
+            try fileManager.removeItem(at: destination)
+        }
+        try fileManager.moveItem(at: tempURL, to: destination)
+        try prepareExecutable(destination)
+    }
+
+    /// Remove the Gatekeeper quarantine attribute, set the execute bit, and
+    /// ad-hoc sign unsigned arm64 binaries (spec §3.1 / §10). URLSession
+    /// downloads are usually not quarantined, so `xattr -d` is best-effort.
+    private func prepareExecutable(_ url: URL) throws {
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        _ = try? Self.run("/usr/bin/xattr", ["-d", "com.apple.quarantine", url.path])
+        if arch.requiresAdHocSignature {
+            _ = try? Self.run("/usr/bin/codesign", ["-s", "-", "--force", url.path])
+        }
+    }
+
+    private func readYtDlpVersion() throws -> String {
+        let out = try Self.run(layout.ytDlpURL.path, ["--version"])
+        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    @discardableResult
+    private static func run(_ launchPath: String, _ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: launchPath)
+        process.arguments = arguments
+        let stdout = Pipe()
+        process.standardOutput = stdout
+        process.standardError = Pipe()
+        try process.run()
+        let data = stdout.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+}
