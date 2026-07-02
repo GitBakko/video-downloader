@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import VideoDownloaderCore
 
 struct RootView: View {
@@ -14,6 +15,9 @@ struct RootView: View {
         }
         .task {
             if app.setupPhase != .ready { await app.bootstrap() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            if app.setupPhase == .ready { app.suggestClipboardURL() }
         }
     }
 }

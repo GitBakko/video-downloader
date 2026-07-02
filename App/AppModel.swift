@@ -22,6 +22,7 @@ final class AppModel {
     var setupPhase: SetupPhase = .installing("Verifica dei componenti…")
     var urlField: String = ""
     var updatingYtDlp: Bool = false
+    private var lastClipboardSuggestion: String?
 
     init() {
         let settings = SettingsStore()
@@ -39,6 +40,7 @@ final class AppModel {
         do {
             try await binaries.ensureInstalled()
             setupPhase = .ready
+            suggestClipboardURL()
         } catch {
             setupPhase = .failed(error.localizedDescription)
         }
@@ -53,6 +55,7 @@ final class AppModel {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !urls.isEmpty else { return }
+        lastClipboardSuggestion = urls.last
         urlField = ""
         // `QueueStore.add(url:)` is `async` (it awaits the yt-dlp probe), so it
         // must be driven from a `Task`; a bare call here is a compile error.
@@ -78,5 +81,23 @@ final class AppModel {
     // MARK: Reveal in Finder (spec §5.2)
     func revealInFinder(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    // MARK: Clipboard proposal (spec §3.6 / §5.2)
+    func suggestClipboardURL() {
+        guard let raw = NSPasteboard.general.string(forType: .string) else { return }
+        let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard AppModel.looksLikeURL(candidate) else { return }
+        guard candidate != lastClipboardSuggestion else { return }          // don't re-propose the same
+        guard urlField.isEmpty else { return }                              // don't overwrite typed text
+        guard !queue.items.contains(where: { $0.url == candidate }) else { return } // skip already added
+        urlField = candidate
+        lastClipboardSuggestion = candidate
+    }
+
+    static func looksLikeURL(_ s: String) -> Bool {
+        guard !s.isEmpty, !s.contains(where: { $0 == " " || $0.isNewline }) else { return false }
+        guard let url = URL(string: s), let scheme = url.scheme?.lowercased() else { return false }
+        return (scheme == "http" || scheme == "https") && (url.host?.isEmpty == false)
     }
 }
