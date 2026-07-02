@@ -42,6 +42,7 @@ targets:
         ENABLE_APP_SANDBOX: NO
         SWIFT_VERSION: "5.9"
         COMBINE_HIDPI_IMAGES: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
 schemes:
   VideoDownloader:
