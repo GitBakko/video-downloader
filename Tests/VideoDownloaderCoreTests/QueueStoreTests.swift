@@ -77,4 +77,25 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(sut.items[0].state, .downloading)
         XCTAssertEqual(engine.startedIDs, [id])
     }
+
+    func test_finishingADownload_promotesNextQueued() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()
+
+        let first = sut.items[0].id
+        let third = sut.items[2].id
+        XCTAssertEqual(sut.items[2].state, .queued)
+
+        engine.finish(first, outputPath: URL(fileURLWithPath: "/tmp/out.mp4"))
+
+        await waitUntil { sut.items.first(where: { $0.id == third })?.state == .downloading }
+
+        XCTAssertEqual(sut.items.first(where: { $0.id == first })?.state, .completed)
+        XCTAssertEqual(sut.items.first(where: { $0.id == first })?.outputPath,
+                       URL(fileURLWithPath: "/tmp/out.mp4"))
+        XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .downloading)
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
+    }
 }

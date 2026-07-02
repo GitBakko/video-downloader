@@ -86,13 +86,24 @@ public final class QueueStore {
                 }
             }
             self.runningTasks[id] = nil
-            // (Task 6.6 adds promoteQueued() here to fill the freed slot.)
+            self.promoteQueued()
         }
         runningTasks[id] = task
     }
 
     private func handle(_ event: DownloadEvent, for id: UUID) {
-        // (Filled in by Tasks 6.6 and 6.10.)
+        switch event {
+        case let .finished(outputPath):
+            updateItem(id) {
+                $0.state = .completed
+                $0.progress = 1.0
+                $0.speed = nil
+                $0.eta = nil
+                $0.outputPath = outputPath
+            }
+        default:
+            break
+        }
     }
 
     private func arguments(for item: DownloadItem) -> [String] {
