@@ -1,12 +1,22 @@
 import SwiftUI
-import VideoDownloaderCore // scaffolding: verifies the app resolves & links the core package
+import VideoDownloaderCore
 
 @main
 struct VideoDownloaderApp: App {
+    @State private var app = AppModel()
+
     var body: some Scene {
         WindowGroup {
-            // Empty for Phase 0. Later phases replace this with MainWindowView.
-            EmptyView()
+            RootView()
+                .environment(app)
+                .frame(minWidth: 760, minHeight: 520)
+        }
+        .windowResizability(.contentSize)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Aggiorna yt-dlp") { app.updateYtDlp() }
+                    .disabled(app.updatingYtDlp)
+            }
         }
     }
 }
