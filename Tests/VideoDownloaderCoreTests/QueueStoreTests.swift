@@ -139,6 +139,58 @@ final class QueueStoreTests: XCTestCase {
         _ = engine
     }
 
+    func test_cancelQueued_marksCancelledWithoutStarting() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()                  // items[2] is queued
+
+        let queuedID = sut.items[2].id
+        sut.cancel(queuedID)
+
+        XCTAssertEqual(sut.items.first(where: { $0.id == queuedID })?.state, .cancelled)
+        XCTAssertFalse(engine.startedIDs.contains(queuedID),
+                       "a queued item that is cancelled is never handed to the engine")
+    }
+
+    func test_cancelDownloading_terminatesMarksCancelledAndPromotesNext() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()                  // items[0],[1] downloading; items[2] queued
+
+        let first = sut.items[0].id
+        let third = sut.items[2].id
+
+        sut.cancel(first)
+
+        XCTAssertTrue(engine.cancelledIDs.contains(first))
+        await waitUntil { sut.items.first(where: { $0.id == first })?.state == .cancelled }
+        await waitUntil { sut.items.first(where: { $0.id == third })?.state == .downloading }
+
+        XCTAssertEqual(sut.items.first(where: { $0.id == first })?.state, .cancelled)
+        XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .downloading)
+    }
+
+    func test_retry_resetsFailedItemToReadyAndRestarts() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(1)
+        await sut.add(url: "https://example.com/v")
+        let id = sut.items[0].id
+        sut.startDownload(id)
+        engine.fail(id, DownloadError.failed(message: "boom", exitCode: 1))
+        await waitUntil { sut.items[0].state == .failed }
+        XCTAssertNotNil(sut.items[0].errorMessage)
+
+        sut.retry(id)
+
+        await waitUntil { sut.items[0].state == .downloading }
+        XCTAssertEqual(sut.items[0].state, .downloading)
+        XCTAssertNil(sut.items[0].errorMessage)
+        XCTAssertEqual(engine.startedIDs.filter { $0 == id }.count, 2,
+                       "retry hands the item to the engine a second time")
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)

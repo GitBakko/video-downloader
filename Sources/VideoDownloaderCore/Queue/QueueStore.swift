@@ -123,6 +123,37 @@ public final class QueueStore {
             ffmpegDirectory: binaries.ffmpegDirectory)
     }
 
+    // MARK: - Cancel
+
+    public func cancel(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }) else { return }
+        switch item.state {
+        case .ready, .queued:
+            updateItem(id) { $0.state = .cancelled }
+        case .downloading, .processing:
+            engine.cancel(id) // stream ends throwing CancellationError → .cancelled, then a slot frees
+        default:
+            break
+        }
+    }
+
+    // MARK: - Retry
+
+    /// Reset a `.failed`/`.cancelled` item back to `.ready` — clearing its error
+    /// and stale progress/stage — then re-enqueue it via `startDownload` (spec §7
+    /// "Riprova"). A no-op for items in any other state.
+    public func retry(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              item.state == .failed || item.state == .cancelled else { return }
+        updateItem(id) {
+            $0.state = .ready
+            $0.errorMessage = nil
+            $0.progress = nil
+            $0.stage = nil
+        }
+        startDownload(id)
+    }
+
     // MARK: - Format override
 
     public func setFormat(_ choice: FormatChoice, for id: UUID) {
