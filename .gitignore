@@ -39,3 +39,6 @@ Carthage/Build/
 
 # Varie
 *.log
+
+# XcodeGen-generated project (source of truth is App/project.yml)
+/App/VideoDownloader.xcodeproj/
