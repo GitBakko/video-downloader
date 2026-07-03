@@ -161,16 +161,29 @@ public extension BinaryProviding {
     }
 }
 
-public enum BinaryManagerError: Error, Equatable {
+public enum BinaryManagerError: Error, LocalizedError, Equatable {
     case downloadFailed(url: URL, status: Int)
+    /// A subprocess used during setup (e.g. `ditto` extracting the yt-dlp bundle)
+    /// exited non-zero, so the tool was never produced (S18).
+    case extractionFailed(tool: String, exitCode: Int32)
+
+    public var errorDescription: String? {
+        switch self {
+        case let .downloadFailed(url, status):
+            return "Impossibile scaricare \(url.lastPathComponent) (HTTP \(status)). Controlla la connessione e riprova."
+        case let .extractionFailed(tool, exitCode):
+            return "Estrazione di \(tool) fallita (codice \(exitCode))."
+        }
+    }
 }
 
 // MARK: - BinaryManager (side effects: network + filesystem + Process)
 
 /// `@unchecked Sendable` is justified: every stored dependency is either an
 /// immutable constant (`layout`, `resolver`, `arch`, `fileManager`, `session`)
-/// or the mutable `ytDlpVersion`, whose reads/writes are serialized by
-/// `versionLock`. So no shared mutable state is ever touched unsynchronized.
+/// or mutable state guarded by a lock — `ytDlpVersion` by `versionLock` and the
+/// cached extractor list by `extractorsLock`. So no shared mutable state is ever
+/// touched unsynchronized.
 public final class BinaryManager: BinaryProviding, @unchecked Sendable {
     private let layout: BinaryLayout
     private let resolver: BinaryURLResolver
@@ -188,6 +201,19 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
     }
     private func setYtDlpVersion(_ value: String?) {
         versionLock.lock(); _ytDlpVersion = value; versionLock.unlock()
+    }
+
+    // `listExtractors()` shells out to `yt-dlp --list-extractors` (~2000 lines);
+    // the parsed result is cached so repeated Help-window opens don't respawn it
+    // (M9). Invalidated on `updateYtDlp()` so a newer yt-dlp refreshes the list.
+    private let extractorsLock = NSLock()
+    private var _cachedExtractors: [String]?
+    private func cachedExtractors() -> [String]? {
+        extractorsLock.lock(); defer { extractorsLock.unlock() }
+        return _cachedExtractors
+    }
+    private func setCachedExtractors(_ value: [String]?) {
+        extractorsLock.lock(); _cachedExtractors = value; extractorsLock.unlock()
     }
 
     public init(
@@ -248,11 +274,15 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
     /// The sites/extractors yt-dlp supports (`yt-dlp --list-extractors`), for the
     /// Help window. Returns `[]` if yt-dlp isn't installed yet or the call fails.
     public func listExtractors() async -> [String] {
-        guard let out = try? await Self.run(layout.ytDlpURL.path, ["--list-extractors"]) else { return [] }
-        return out
+        if let cached = cachedExtractors() { return cached }
+
+        guard let result = try? await Self.run(layout.ytDlpURL.path, ["--list-extractors"]) else { return [] }
+        let extractors = result.stdout
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
+        setCachedExtractors(extractors)
+        return extractors
     }
 
     /// Spec §5.3: re-download the latest yt-dlp (the onedir zip), re-extract it,
@@ -264,6 +294,9 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
             into: layout.ytDlpDirectory,
             executable: layout.ytDlpURL
         )
+        // The extractor list may have changed with the new build — drop the cache
+        // so the next `listExtractors()` re-reads it (M9).
+        setCachedExtractors(nil)
         setYtDlpVersion(try? await readYtDlpVersion())
     }
 
@@ -338,7 +371,13 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
             try fileManager.removeItem(at: extractDirectory)
         }
         try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
-        _ = try await Self.run("/usr/bin/ditto", ["-x", "-k", staged.path, extractDirectory.path])
+        // S18: a failed ditto extraction used to be silent — the missing inner
+        // executable only surfaced later as a confusing "No such file". Surface
+        // the real cause here.
+        let ditto = try await Self.run("/usr/bin/ditto", ["-x", "-k", staged.path, extractDirectory.path])
+        guard ditto.status == 0 else {
+            throw BinaryManagerError.extractionFailed(tool: "yt-dlp", exitCode: ditto.status)
+        }
         try await prepareYtDlpExecutable(directory: extractDirectory, executable: executable)
     }
 
@@ -366,30 +405,50 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
     }
 
     private func readYtDlpVersion() async throws -> String {
-        let out = try await Self.run(layout.ytDlpURL.path, ["--version"])
-        return out.trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await Self.run(layout.ytDlpURL.path, ["--version"])
+        return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Runs a short-lived tool and returns its stdout. The blocking pipe read and
-    /// `waitUntilExit()` run on a global queue so no cooperative thread is blocked.
+    /// Runs a short-lived tool and returns its stdout together with the exit
+    /// status. Follows `SystemProbeRunner.run`'s pattern (S11 / P13): the pipes
+    /// are drained off the cooperative pool and termination is awaited via
+    /// `ProcessTerminationSignal` — so no cooperative thread is ever blocked — and
+    /// the wait is cancellation-aware, terminating the child if the Task is
+    /// cancelled. The `status` is returned (not swallowed) so callers such as
+    /// `downloadAndExtract` can react to a non-zero exit (S18).
     @discardableResult
-    private static func run(_ launchPath: String, _ arguments: [String]) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+    private static func run(_ launchPath: String, _ arguments: [String]) async throws -> (stdout: String, status: Int32) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: launchPath)
+        process.arguments = arguments
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errPipe
+
+        // Wire up termination BEFORE run() so the callback is never missed.
+        let terminated = ProcessTerminationSignal()
+        process.terminationHandler = { _ in terminated.signal() }
+
+        try process.run()
+        // Drain both pipes concurrently off the pool so a full buffer never
+        // blocks the child (stderr is discarded — we only surface stdout).
+        async let outData = readAll(outPipe.fileHandleForReading)
+        async let errData = readAll(errPipe.fileHandleForReading)
+        let (data, _) = await (outData, errData)
+        await withTaskCancellationHandler {
+            await terminated.wait()
+        } onCancel: {
+            process.terminate()
+        }
+        return (String(data: data, encoding: .utf8) ?? "", process.terminationStatus)
+    }
+
+    private static func readAll(_ handle: FileHandle) async -> Data {
+        await withCheckedContinuation { cont in
             DispatchQueue.global().async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: launchPath)
-                process.arguments = arguments
-                let stdout = Pipe()
-                process.standardOutput = stdout
-                process.standardError = Pipe()
-                do {
-                    try process.run()
-                    let data = stdout.fileHandleForReading.readDataToEndOfFile()
-                    process.waitUntilExit()
-                    continuation.resume(returning: String(data: data, encoding: .utf8) ?? "")
-                } catch {
-                    continuation.resume(throwing: error)
-                }
+                let data = (try? handle.readToEnd()) ?? Data()
+                cont.resume(returning: data)
             }
         }
     }
