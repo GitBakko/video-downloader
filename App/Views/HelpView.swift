@@ -5,6 +5,7 @@ import VideoDownloaderCore
 /// Help window: what the app is, how it works, and the list of supported sites.
 struct HelpView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
 
     @State private var extractors: [String] = []
     @State private var loading = true
@@ -65,7 +66,9 @@ struct HelpView: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Video Downloader").font(.title2).bold()
-                    Text("v\(Bundle.main.shortVersion)").font(.caption).foregroundStyle(.secondary)
+                    Button("v\(Bundle.main.shortVersion) · Novità") { openWindow(id: "whatsnew") }
+                        .buttonStyle(.link)
+                        .font(.caption)
                 }
             }
             Text("Scarica video (o solo l'audio) da quasi ogni sito. Incolli un URL, "

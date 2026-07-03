@@ -24,6 +24,7 @@ struct VideoDownloaderApp: App {
                 HelpMenuButton()
             }
             CommandGroup(after: .appInfo) {
+                WhatsNewMenuButton()
                 Button("Aggiorna yt-dlp") { app.updateYtDlp() }
                     .disabled(app.updatingYtDlp)
             }
@@ -44,6 +45,11 @@ struct VideoDownloaderApp: App {
         }
         .windowResizability(.contentSize)
 
+        Window("Novità — Video Downloader", id: "whatsnew") {
+            ChangelogView()
+        }
+        .windowResizability(.contentSize)
+
         Settings {
             SettingsView()
                 .environment(app)
@@ -58,6 +64,14 @@ private struct HelpMenuButton: View {
     var body: some View {
         Button("Aiuto Video Downloader") { openWindow(id: "help") }
             .keyboardShortcut("?", modifiers: .command)
+    }
+}
+
+/// Menu command (app menu) that opens the in-app release history window.
+private struct WhatsNewMenuButton: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Novità…") { openWindow(id: "whatsnew") }
     }
 }
 

@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **In-app release history** (*Novità*): a window that shows this changelog
+  parsed by version — what changed in each release, newest first, with the
+  current version marked. Open it from the app menu (*Video Downloader → Novità…*)
+  or the version link in the Help window. `CHANGELOG.md` is bundled into the app
+  and rendered by a pure, tested parser (`ChangelogParser`).
 
 ## [1.2.0] - 2026-07-03
 

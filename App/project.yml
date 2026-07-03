@@ -24,6 +24,10 @@ targets:
           - "*.entitlements"
           - "*.xcodeproj"
           - ".DS_Store"
+      # Bundle the changelog so the in-app "Novità" window always shows the
+      # current release history (parsed by ChangelogParser).
+      - path: ../CHANGELOG.md
+        buildPhase: resources
     dependencies:
       - package: VideoDownloaderCore
         product: VideoDownloaderCore
