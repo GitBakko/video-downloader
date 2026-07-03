@@ -111,7 +111,6 @@ public final class QueueStore {
 
     // MARK: - Starting
 
-    private let maxConcurrent = 2
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
     public func startDownload(_ id: UUID) {
@@ -134,21 +133,39 @@ public final class QueueStore {
 
     // MARK: - Promotion
 
-    private var activeSlots: Int {
-        items.filter { $0.state == .downloading || $0.state == .processing }.count
-    }
-
     private func promoteQueued() {
         guard !isQueuePaused else { return }
-        // Compute the active count once and track promotions locally so the
-        // O(n) `activeSlots` filter isn't recomputed on every loop iteration.
-        var active = activeSlots
-        while active < maxConcurrent,
-              let next = items.first(where: { $0.state == .queued }) {
+        let overallMax = max(1, settings.maxConcurrentDownloads)
+        let perSourceMax = max(1, settings.maxConcurrentPerSource)
+
+        // Count what's already running, overall and per source (once, up front).
+        var activeTotal = 0
+        var activePerSource: [String: Int] = [:]
+        for item in items where item.state == .downloading || item.state == .processing {
+            activeTotal += 1
+            activePerSource[sourceKey(item), default: 0] += 1
+        }
+
+        // Promote queued items in order, respecting BOTH the overall cap and the
+        // per-source cap. A queued item whose source is already full is skipped so
+        // a later item from a *different* source can still start.
+        while activeTotal < overallMax,
+              let next = items.first(where: {
+                  $0.state == .queued && activePerSource[sourceKey($0), default: 0] < perSourceMax
+              }) {
             updateItem(next.id) { $0.state = .downloading }
             launch(next.id)
-            active += 1
+            activeTotal += 1
+            activePerSource[sourceKey(next), default: 0] += 1
         }
+    }
+
+    /// Key used to group downloads for the per-source concurrency limit: prefer
+    /// yt-dlp's extractor ("Youtube" covers youtube.com *and* youtu.be), else host.
+    private func sourceKey(_ item: DownloadItem) -> String {
+        if let source = item.source, !source.isEmpty { return source.lowercased() }
+        let host = URL(string: item.url)?.host ?? item.url
+        return host.lowercased().replacingOccurrences(of: "www.", with: "")
     }
 
     private func launch(_ id: UUID) {

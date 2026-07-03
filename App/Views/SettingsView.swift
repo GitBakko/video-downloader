@@ -29,6 +29,19 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+
+                Stepper(value: $settings.maxConcurrentDownloads, in: 1...8) {
+                    LabeledContent("Download contemporanei (totale)",
+                                   value: "\(settings.maxConcurrentDownloads)")
+                }
+                Stepper(value: $settings.maxConcurrentPerSource, in: 1...8) {
+                    LabeledContent("Contemporanei per singola fonte",
+                                   value: "\(settings.maxConcurrentPerSource)")
+                }
+                Text("Quanti download possono partire insieme in tutta l’app e quanti dallo stesso sito (per non sovraccaricare una singola fonte).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("Extra") {

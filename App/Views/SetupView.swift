@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import VideoDownloaderCore
 
 struct SetupView: View {
@@ -6,9 +7,9 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Image(systemName: "arrow.down.app")
-                .font(.system(size: 52))
-                .foregroundStyle(.tint)
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
             Text("Video Downloader").font(.title2).bold()
 

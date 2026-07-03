@@ -412,6 +412,24 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
     }
 
+    func test_perSourceLimit_capsConcurrentDownloadsFromSameSource() async {
+        let prober = FakeProber()
+        let settings = makeEphemeralSettings()
+        settings.maxConcurrentDownloads = 2    // the overall cap would allow 2…
+        settings.maxConcurrentPerSource = 1    // …but only 1 per source
+        let sut = QueueStore(prober: prober, engine: FakeEngine(),
+                             binaries: FakeBinaries(), settings: settings)
+        prober.itemsToReturn = makeReadyItems(2)   // both example.com → same source
+        await sut.add(url: "https://example.com/playlist")
+
+        sut.startAll()   // promoteQueued marks items .downloading synchronously
+
+        // Same source + per-source=1 → only one runs; the other waits in the queue,
+        // even though the overall cap (2) would otherwise allow both.
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 1)
+        XCTAssertEqual(sut.items.filter { $0.state == .queued }.count, 1)
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)

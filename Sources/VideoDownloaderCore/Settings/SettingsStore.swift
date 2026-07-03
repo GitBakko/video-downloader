@@ -24,6 +24,16 @@ public final class SettingsStore {
     public var autoStartDownloads: Bool {
         didSet { defaults.set(autoStartDownloads, forKey: Keys.autoStart) }
     }
+    /// Max downloads running at once across the whole app. Clamped to >= 1 at the
+    /// read sites (never reassigned in `didSet` — that would recurse infinitely).
+    public var maxConcurrentDownloads: Int {
+        didSet { defaults.set(maxConcurrentDownloads, forKey: Keys.maxConcurrent) }
+    }
+    /// Max downloads running at once from a single source/site — keeps one site from
+    /// hogging all slots (and helps avoid per-site rate-limiting). Clamped to >= 1.
+    public var maxConcurrentPerSource: Int {
+        didSet { defaults.set(maxConcurrentPerSource, forKey: Keys.maxPerSource) }
+    }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -35,6 +45,8 @@ public final class SettingsStore {
         defaultFormat = Self.decode(defaults.string(forKey: Keys.defaultFormat)) ?? .video(.best)
         embedThumbnailAndMetadata = defaults.object(forKey: Keys.embed) as? Bool ?? false
         autoStartDownloads = defaults.object(forKey: Keys.autoStart) as? Bool ?? false
+        maxConcurrentDownloads = max(1, defaults.object(forKey: Keys.maxConcurrent) as? Int ?? 2)
+        maxConcurrentPerSource = max(1, defaults.object(forKey: Keys.maxPerSource) as? Int ?? 2)
     }
 
     /// The value consumed by Phase 6's `QueueStore` / `ArgumentBuilder` (Task 1b.3 type).
@@ -54,6 +66,8 @@ public final class SettingsStore {
         static let defaultFormat = "settings.defaultFormat"
         static let embed = "settings.embedThumbnailAndMetadata"
         static let autoStart = "settings.autoStartDownloads"
+        static let maxConcurrent = "settings.maxConcurrentDownloads"
+        static let maxPerSource = "settings.maxConcurrentPerSource"
     }
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)
