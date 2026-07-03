@@ -43,7 +43,7 @@ actor FaviconCache {
 
     private func load(host: String) async -> NSImage? {
         let file = dir.appendingPathComponent(sanitize(host) + ".png")
-        if let data = try? Data(contentsOf: file), let image = NSImage(data: data) {
+        if let data = await Self.readFile(file), let image = NSImage(data: data) {
             return image
         }
         // Favicon service: reliable, returns a normalized PNG, no per-site scraping.
@@ -53,8 +53,21 @@ actor FaviconCache {
               (response as? HTTPURLResponse)?.statusCode == 200,
               let image = NSImage(data: data)
         else { return nil }
-        try? data.write(to: file)   // persist the raw PNG for reuse across launches
+        Self.writeFile(data, to: file)   // persist the raw PNG for reuse across launches
         return image
+    }
+
+    /// Read the cached PNG off the cooperative pool: `Data(contentsOf:)` is a
+    /// blocking syscall, and running it directly on the actor would stall the
+    /// cooperative thread while the disk responds (P14). Only `Data` (Sendable)
+    /// crosses the boundary; the `NSImage` is decoded back on the actor.
+    private static func readFile(_ url: URL) async -> Data? {
+        await Task.detached(priority: .utility) { try? Data(contentsOf: url) }.value
+    }
+
+    /// Persist the PNG without blocking the actor (fire-and-forget; P14).
+    private static func writeFile(_ data: Data, to url: URL) {
+        Task.detached(priority: .utility) { try? data.write(to: url) }
     }
 
     private func sanitize(_ host: String) -> String {
@@ -73,11 +86,18 @@ struct FaviconView: View {
         Group {
             if let image {
                 Image(nsImage: image).resizable().interpolation(.high)
+                    .transition(.opacity)
             } else {
                 Image(systemName: "globe").resizable().foregroundStyle(.secondary)
+                    .transition(.opacity)
             }
         }
         .frame(width: size, height: size)
+        // Decorative: the adjacent site name / host already conveys the source, so
+        // the icon (and its globe fallback) is hidden from VoiceOver (M6).
+        .accessibilityHidden(true)
+        // Gentle cross-fade when the real favicon replaces the globe (P4).
+        .animation(.easeInOut(duration: 0.2), value: image != nil)
         .task(id: host) { image = await FaviconCache.shared.icon(forHost: host) }
     }
 }
