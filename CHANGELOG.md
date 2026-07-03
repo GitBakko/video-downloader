@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.3.2] - 2026-07-03
+
 ### Fixed
 - **Concurrent downloads no longer wedge in "Preparazione".** Each download's
   stdout/stderr was read with `FileHandle.bytes`, whose blocking `read()` tied up
