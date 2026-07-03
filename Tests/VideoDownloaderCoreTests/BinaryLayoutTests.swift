@@ -10,7 +10,10 @@ final class BinaryLayoutTests: XCTestCase {
     }
 
     func test_binaryPaths() {
-        XCTAssertEqual(layout.ytDlpURL.path, "/tmp/AS/VideoDownloader/bin/yt-dlp")
+        // yt-dlp is now a onedir bundle: the runnable executable lives *inside*
+        // the extraction directory next to its `_internal/` runtime.
+        XCTAssertEqual(layout.ytDlpDirectory.path, "/tmp/AS/VideoDownloader/bin/yt-dlp")
+        XCTAssertEqual(layout.ytDlpURL.path, "/tmp/AS/VideoDownloader/bin/yt-dlp/yt-dlp_macos")
         XCTAssertEqual(layout.ffmpegURL.path, "/tmp/AS/VideoDownloader/bin/ffmpeg")
         XCTAssertEqual(layout.ffprobeURL.path, "/tmp/AS/VideoDownloader/bin/ffprobe")
     }

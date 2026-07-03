@@ -26,10 +26,15 @@ public enum HostArchitecture: String, Sendable, CaseIterable {
 public struct BinaryURLResolver: Sendable {
     public init() {}
 
-    /// yt-dlp standalone macOS build. A single self-contained binary that runs
-    /// on both Apple Silicon and Intel, so it is NOT architecture-specific.
+    /// yt-dlp standalone macOS build — the PyInstaller **onedir** archive
+    /// (`yt-dlp_macos.zip`), NOT the onefile binary. The onefile re-extracts its
+    /// bundled Python runtime on *every* invocation (~24s each on Intel); the
+    /// onedir build extracts once at install time so subsequent probes are fast
+    /// (~0.66s). It runs on both Apple Silicon and Intel, so it is NOT
+    /// architecture-specific. Unpacking it yields an inner `yt-dlp_macos`
+    /// executable alongside its `_internal/` runtime directory.
     public func ytDlpDownloadURL() -> URL {
-        URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos")!
+        URL(string: "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos.zip")!
     }
 
     /// Static ffmpeg build, architecture-matched.
@@ -81,7 +86,14 @@ public struct BinaryLayout: Sendable {
         supportDirectory.appendingPathComponent("bin", isDirectory: true)
     }
 
-    public var ytDlpURL: URL { binDirectory.appendingPathComponent("yt-dlp", isDirectory: false) }
+    /// Directory holding the extracted yt-dlp onedir bundle: the inner
+    /// `yt-dlp_macos` executable plus its `_internal/` Python runtime. Running
+    /// the executable from here (with `_internal/` beside it) is what makes
+    /// yt-dlp fast — unlike the onefile build, nothing is re-extracted per run.
+    public var ytDlpDirectory: URL { binDirectory.appendingPathComponent("yt-dlp", isDirectory: true) }
+
+    /// The runnable yt-dlp executable *inside* the extracted onedir bundle.
+    public var ytDlpURL: URL { ytDlpDirectory.appendingPathComponent("yt-dlp_macos", isDirectory: false) }
     public var ffmpegURL: URL { binDirectory.appendingPathComponent("ffmpeg", isDirectory: false) }
     public var ffprobeURL: URL { binDirectory.appendingPathComponent("ffprobe", isDirectory: false) }
 }
@@ -91,17 +103,31 @@ public struct BinaryLayout: Sendable {
 public struct BinaryDownloadTask: Equatable, Sendable {
     public let remote: URL
     public let destination: URL
-    public init(remote: URL, destination: URL) {
+    /// When non-nil, `remote` is a `.zip` archive that must be **extracted** into
+    /// this directory (replacing any prior contents); `destination` is then the
+    /// runnable file produced by extraction (yt-dlp's inner executable). When
+    /// nil, `remote` is a single file downloaded directly to `destination`
+    /// (ffmpeg / ffprobe).
+    public let extractDirectory: URL?
+    public init(remote: URL, destination: URL, extractDirectory: URL? = nil) {
         self.remote = remote
         self.destination = destination
+        self.extractDirectory = extractDirectory
     }
 }
 
 public extension BinaryURLResolver {
     /// The full set of downloads required for a fresh install, arch-matched.
+    /// yt-dlp is a zip that is extracted into `layout.ytDlpDirectory`; its
+    /// destination (the "installed?" marker) is the inner executable. ffmpeg and
+    /// ffprobe are plain single-file downloads.
     func installTasks(layout: BinaryLayout, arch: HostArchitecture) -> [BinaryDownloadTask] {
         [
-            BinaryDownloadTask(remote: ytDlpDownloadURL(), destination: layout.ytDlpURL),
+            BinaryDownloadTask(
+                remote: ytDlpDownloadURL(),
+                destination: layout.ytDlpURL,
+                extractDirectory: layout.ytDlpDirectory
+            ),
             BinaryDownloadTask(remote: ffmpegDownloadURL(arch: arch), destination: layout.ffmpegURL),
             BinaryDownloadTask(remote: ffprobeDownloadURL(arch: arch), destination: layout.ffprobeURL),
         ]
@@ -194,39 +220,72 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
         } else {
             let reporter = OverallProgressReporter(fileCount: pending.count, report: onProgress)
             for (index, task) in pending.enumerated() {
-                try await download(task.remote, to: task.destination) { written, expected in
+                try await install(task) { written, expected in
                     reporter.update(file: index, written: written, expected: expected)
                 }
                 reporter.markComplete(file: index)
             }
         }
+        // Warm-up: the first run of the freshly extracted yt-dlp pays a one-time
+        // ~30s Gatekeeper scan. Doing it here — behind the progress bar — means
+        // the user's first real probe is already fast.
         setYtDlpVersion(try? await readYtDlpVersion())
     }
 
-    /// Spec §5.3: re-download the latest yt-dlp and refresh the version.
+    /// Spec §5.3: re-download the latest yt-dlp (the onedir zip), re-extract it,
+    /// and refresh the version.
     public func updateYtDlp() async throws {
         try fileManager.createDirectory(at: layout.binDirectory, withIntermediateDirectories: true)
-        try await download(resolver.ytDlpDownloadURL(), to: layout.ytDlpURL)
+        try await downloadAndExtract(
+            resolver.ytDlpDownloadURL(),
+            into: layout.ytDlpDirectory,
+            executable: layout.ytDlpURL
+        )
         setYtDlpVersion(try? await readYtDlpVersion())
     }
 
     // MARK: Side effects
 
+    /// Installs one pending task: either a plain single-file download
+    /// (ffmpeg / ffprobe) or a download-then-extract of the yt-dlp onedir zip.
+    private func install(
+        _ task: BinaryDownloadTask,
+        onFileProgress: @escaping @Sendable (_ written: Int64, _ expected: Int64) -> Void
+    ) async throws {
+        if let extractDirectory = task.extractDirectory {
+            try await downloadAndExtract(
+                task.remote,
+                into: extractDirectory,
+                executable: task.destination,
+                onFileProgress: onFileProgress
+            )
+        } else {
+            try await download(task.remote, to: task.destination, onFileProgress: onFileProgress)
+        }
+    }
+
     /// Delegate-driven download so we can surface byte-level progress. The
     /// `DownloadCoordinator` reports `totalBytesWritten / totalBytesExpectedToWrite`
     /// as data arrives, stages the finished file out of the (soon-to-be-deleted)
     /// temp location, and bridges completion back to async. A non-2xx status is
-    /// mapped to `downloadFailed`; the finished file is then moved into place and
-    /// made executable — exactly as before.
+    /// mapped to `downloadFailed`. Returns the staged temp file's URL.
+    private func stageDownload(
+        _ remote: URL,
+        onFileProgress: @escaping @Sendable (_ written: Int64, _ expected: Int64) -> Void
+    ) async throws -> URL {
+        let coordinator = DownloadCoordinator(fileManager: fileManager, onProgress: onFileProgress)
+        let task = session.downloadTask(with: remote)
+        task.delegate = coordinator
+        return try await coordinator.run(task: task)
+    }
+
+    /// Download a single file into place and make it executable (ffmpeg/ffprobe).
     private func download(
         _ remote: URL,
         to destination: URL,
         onFileProgress: @escaping @Sendable (_ written: Int64, _ expected: Int64) -> Void = { _, _ in }
     ) async throws {
-        let coordinator = DownloadCoordinator(fileManager: fileManager, onProgress: onFileProgress)
-        let task = session.downloadTask(with: remote)
-        task.delegate = coordinator
-        let staged = try await coordinator.run(task: task)
+        let staged = try await stageDownload(remote, onFileProgress: onFileProgress)
         do {
             if fileManager.fileExists(atPath: destination.path) {
                 try fileManager.removeItem(at: destination)
@@ -239,6 +298,27 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
         try await prepareExecutable(destination)
     }
 
+    /// Download the yt-dlp onedir `.zip` and unpack it into `extractDirectory`,
+    /// replacing any previous extraction, then make the inner `executable`
+    /// runnable. `ditto -x -k` unpacks a macOS zip cleanly (preserving the
+    /// onedir layout of executable + `_internal/`); the download itself has no
+    /// `.zip` suffix but ditto reads the archive by content, not extension.
+    private func downloadAndExtract(
+        _ remote: URL,
+        into extractDirectory: URL,
+        executable: URL,
+        onFileProgress: @escaping @Sendable (_ written: Int64, _ expected: Int64) -> Void = { _, _ in }
+    ) async throws {
+        let staged = try await stageDownload(remote, onFileProgress: onFileProgress)
+        defer { try? fileManager.removeItem(at: staged) }
+        if fileManager.fileExists(atPath: extractDirectory.path) {
+            try fileManager.removeItem(at: extractDirectory)
+        }
+        try fileManager.createDirectory(at: extractDirectory, withIntermediateDirectories: true)
+        _ = try await Self.run("/usr/bin/ditto", ["-x", "-k", staged.path, extractDirectory.path])
+        try await prepareYtDlpExecutable(directory: extractDirectory, executable: executable)
+    }
+
     /// Remove the Gatekeeper quarantine attribute, set the execute bit, and
     /// ad-hoc sign unsigned arm64 binaries (spec §3.1 / §10). URLSession
     /// downloads are usually not quarantined, so `xattr -d` is best-effort.
@@ -247,6 +327,18 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
         _ = try? await Self.run("/usr/bin/xattr", ["-d", "com.apple.quarantine", url.path])
         if arch.requiresAdHocSignature {
             _ = try? await Self.run("/usr/bin/codesign", ["-s", "-", "--force", url.path])
+        }
+    }
+
+    /// Make the extracted yt-dlp bundle runnable: set the execute bit on the
+    /// inner executable, strip quarantine **recursively** across the whole
+    /// bundle (executable + `_internal/`, best-effort), and on arm64 ad-hoc sign
+    /// the inner executable.
+    private func prepareYtDlpExecutable(directory: URL, executable: URL) async throws {
+        try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        _ = try? await Self.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", directory.path])
+        if arch.requiresAdHocSignature {
+            _ = try? await Self.run("/usr/bin/codesign", ["-s", "-", "--force", executable.path])
         }
     }
 

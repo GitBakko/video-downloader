@@ -4,10 +4,12 @@ import XCTest
 final class BinaryURLResolverTests: XCTestCase {
     let resolver = BinaryURLResolver()
 
-    func test_ytDlpURL_isArchIndependentMacOSBuild() {
+    // The onedir zip (not the onefile binary): extracted once at install, then
+    // fast on every run. Arch-independent, so no arch token in the asset name.
+    func test_ytDlpURL_isArchIndependentMacOSOnedirZip() {
         XCTAssertEqual(
             resolver.ytDlpDownloadURL().absoluteString,
-            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos"
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos.zip"
         )
     }
 
