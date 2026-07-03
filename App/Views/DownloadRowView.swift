@@ -14,6 +14,7 @@ struct DownloadRowView: View {
             HStack(alignment: .top, spacing: 12) {
                 thumbnail
                 VStack(alignment: .leading, spacing: 4) {
+                    sourceBadge
                     Text(item.title ?? item.url)
                         .font(.headline)
                         .lineLimit(2)
@@ -68,7 +69,8 @@ struct DownloadRowView: View {
             Circle().fill(stateColor).frame(width: 8, height: 8)
             // Generic, state-derived label only — never the raw yt-dlp `item.stage`
             // token (a bv*+ba download resets the bar between the video/audio passes).
-            Text(stateLabel).font(.caption).foregroundStyle(.secondary)
+            // Colored by state so the status reads at a glance (grey only while probing).
+            Text(stateLabel).font(.caption.weight(.medium)).foregroundStyle(stateColor)
         }
     }
 
@@ -138,6 +140,19 @@ struct DownloadRowView: View {
     }
 
     // MARK: Helpers
+
+    /// Favicon of the video's source site + the source name (spec: show the source).
+    private var sourceBadge: some View {
+        let host = URL(string: item.url)?.host ?? ""
+        let label = item.source ?? host.replacingOccurrences(of: "www.", with: "")
+        return HStack(spacing: 4) {
+            FaviconView(host: host)
+            if !label.isEmpty {
+                Text(label).font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
     private func suggestsUpdate(_ msg: String) -> Bool {
         let m = msg.lowercased()
         return m.contains("update") || m.contains("yt-dlp")
@@ -146,11 +161,14 @@ struct DownloadRowView: View {
 
     private var stateColor: Color {
         switch item.state {
+        case .probing: return .gray
+        case .ready: return .teal
+        case .queued: return .yellow
+        case .downloading: return .blue
+        case .processing: return .purple
         case .completed: return .green
         case .failed: return .red
         case .cancelled: return .orange
-        case .downloading, .processing: return .blue
-        default: return .secondary
         }
     }
 
