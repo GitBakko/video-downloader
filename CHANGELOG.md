@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Download history** (*Cronologia*): a persistent, searchable log of completed
+  downloads in its own window (View menu → *Cronologia download*, ⌘Y, or the
+  toolbar clock button). Filter by source, title/URL search, and by *scaricato* /
+  *aggiunto* date ranges; per-row *Rimetti in coda*, *Mostra nel Finder*, and
+  *Rimuovi dalla cronologia*; plus *Svuota cronologia*. Stored at
+  `~/Library/Application Support/VideoDownloader/history.json`.
 - **Queue management**: remove a single video (right-click a row → *Rimuovi dalla
   coda*), and a *Coda* toolbar menu to *Rimuovi i completati*, *Rimuovi i terminati*,
   or *Svuota la coda*. Removing an active item stops its download first.
