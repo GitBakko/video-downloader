@@ -16,9 +16,11 @@ struct SetupView: View {
             case .installing(let message):
                 if let progress = app.setupProgress {
                     VStack(spacing: 6) {
+                        // P6: fill the (now compact) setup window instead of a
+                        // fixed 300pt strip lost in a huge frame.
                         ProgressView(value: progress) { Text(message) }
                             .progressViewStyle(.linear)
-                            .frame(maxWidth: 300)
+                            .frame(maxWidth: .infinity)
                         Text("\(Int(progress * 100))%")
                             .font(.caption)
                             .monospacedDigit()
