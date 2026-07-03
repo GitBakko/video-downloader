@@ -218,12 +218,21 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
         if pending.isEmpty {
             onProgress(1)
         } else {
+            // Download (and, for yt-dlp, extract) all pending binaries in
+            // parallel so ~190MB doesn't stream one-after-another. The reporter
+            // is lock-guarded and keyed by per-file index, so concurrent updates
+            // are safe. A throw from any child cancels the group and propagates.
             let reporter = OverallProgressReporter(fileCount: pending.count, report: onProgress)
-            for (index, task) in pending.enumerated() {
-                try await install(task) { written, expected in
-                    reporter.update(file: index, written: written, expected: expected)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                for (index, task) in pending.enumerated() {
+                    group.addTask {
+                        try await self.install(task) { written, expected in
+                            reporter.update(file: index, written: written, expected: expected)
+                        }
+                        reporter.markComplete(file: index)
+                    }
                 }
-                reporter.markComplete(file: index)
+                try await group.waitForAll()
             }
         }
         // Warm-up: the first run of the freshly extracted yt-dlp pays a one-time
