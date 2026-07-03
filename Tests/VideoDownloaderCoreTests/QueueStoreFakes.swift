@@ -62,6 +62,16 @@ final class FakeEngine: Downloading, @unchecked Sendable {
         continuation?.finish(throwing: CancellationError())
     }
 
+    private(set) var terminateAllCount = 0
+    func terminateAll() {
+        lock.lock()
+        terminateAllCount += 1
+        let all = Array(continuations.values)
+        lock.unlock()
+        // Mirror a real engine: every in-flight stream ends as a cancellation.
+        for continuation in all { continuation.finish(throwing: CancellationError()) }
+    }
+
     // MARK: Test drivers
     func emitProgress(_ id: UUID, percent: Double?, speed: String? = nil, eta: String? = nil, stage: String? = nil) {
         continuation(for: id)?.yield(.progress(percent: percent, speed: speed, eta: eta, stage: stage))

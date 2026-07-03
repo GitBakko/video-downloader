@@ -14,4 +14,7 @@ public enum DownloadEvent {
 public protocol Downloading {
     func events(for item: DownloadItem, arguments: [String]) -> AsyncThrowingStream<DownloadEvent, Error>
     func cancel(_ id: UUID)
+    /// Terminate every in-flight process this engine started. Called on app quit
+    /// so no orphaned yt-dlp process is left behind (spec §5 / S16).
+    func terminateAll()
 }

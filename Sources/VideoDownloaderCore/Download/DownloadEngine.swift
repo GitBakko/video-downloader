@@ -88,10 +88,16 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
                     self.remove(id)
 
                     if process.terminationReason == .uncaughtSignal {
-                        // Killed by cancel(_:) → surface as cancellation.
+                        // Killed by cancel(_:)/terminateAll() → surface as cancellation.
                         continuation.finish(throwing: CancellationError())
                     } else if process.terminationStatus == 0 {
-                        continuation.yield(.finished(outputPath: await state.destination))
+                        // P17: a clean exit whose Destination line we never parsed
+                        // still succeeded — fall back to the configured output
+                        // directory (from `-o`) so the app can at least reveal the
+                        // folder, rather than reporting a completed item with no path.
+                        let output = await state.destination
+                            ?? DownloadEngine.outputDirectory(from: arguments)
+                        continuation.yield(.finished(outputPath: output))
                         continuation.finish()
                     } else {
                         continuation.finish(throwing: DownloadError.failed(
@@ -116,6 +122,15 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
         let process = processes[id]
         lock.unlock()
         process?.terminate() // SIGTERM → terminationReason == .uncaughtSignal
+    }
+
+    /// Terminate every in-flight yt-dlp process this engine started (S16). Each
+    /// killed process ends its stream with a `CancellationError`, freeing its slot.
+    public func terminateAll() {
+        lock.lock()
+        let running = Array(processes.values)
+        lock.unlock()
+        for process in running { process.terminate() }
     }
 
     // MARK: - Process registry
@@ -166,6 +181,15 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
             return path.isEmpty ? nil : URL(fileURLWithPath: path)
         }
         return nil
+    }
+
+    /// The destination directory encoded in the `-o` output template (P17). Used
+    /// as a fallback output path when a clean download never printed a parseable
+    /// `Destination:` line, so the app can still reveal the target folder.
+    static func outputDirectory(from arguments: [String]) -> URL? {
+        guard let flag = arguments.firstIndex(of: "-o"), flag + 1 < arguments.count else { return nil }
+        let directory = (arguments[flag + 1] as NSString).deletingLastPathComponent
+        return directory.isEmpty ? nil : URL(fileURLWithPath: directory, isDirectory: true)
     }
 }
 

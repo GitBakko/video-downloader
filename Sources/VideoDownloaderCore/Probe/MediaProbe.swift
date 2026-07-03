@@ -38,7 +38,13 @@ public struct SystemProbeRunner: ProbeRunning {
         async let out = Self.readAll(outPipe.fileHandleForReading)
         async let err = Self.readAll(errPipe.fileHandleForReading)
         let (outData, errData) = await (out, err)
-        await terminated.wait()
+        // Cancelling the probe Task (M1: cancelling a `.probing` item) kills the
+        // yt-dlp process so the wait returns promptly instead of hanging.
+        await withTaskCancellationHandler {
+            await terminated.wait()
+        } onCancel: {
+            process.terminate()
+        }
         return ProbeResult(stdout: outData, stderr: errData, exitCode: process.terminationStatus)
     }
 

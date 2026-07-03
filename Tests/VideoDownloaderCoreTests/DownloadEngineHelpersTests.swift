@@ -54,4 +54,16 @@ final class DownloadEngineHelpersTests: XCTestCase {
         let error = DownloadError.failed(message: "", exitCode: 1)
         XCTAssertEqual(error.userMessage, "Download non riuscito.")
     }
+
+    // MARK: - P17: output directory fallback
+
+    func test_outputDirectory_extractsDestinationFromArguments() {
+        let args = ["-f", "bv*+ba/b", "-o", "/Users/x/Movies/%(title)s [%(id)s].%(ext)s", "--newline"]
+        XCTAssertEqual(DownloadEngine.outputDirectory(from: args),
+                       URL(fileURLWithPath: "/Users/x/Movies", isDirectory: true))
+    }
+
+    func test_outputDirectory_nilWhenNoOutputFlag() {
+        XCTAssertNil(DownloadEngine.outputDirectory(from: ["-f", "best", "--newline"]))
+    }
 }

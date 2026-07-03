@@ -246,6 +246,80 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertNil(sut.items[0].progress, "post-processing is indeterminate")
     }
 
+    // MARK: - M1: cancelling a probing item
+
+    func test_cancelProbing_cancelsProbeAndMarksCancelled() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)
+        let gate = ProbeGate()
+        prober.gate = gate
+
+        let task = Task { await sut.add(url: "https://example.com/playlist") }
+        // Wait for the placeholder to appear while the probe is gated (in-flight).
+        await waitUntil { sut.items.count == 1 && sut.items.first?.state == .probing }
+        let id = sut.items[0].id
+
+        sut.cancel(id)
+        XCTAssertEqual(sut.items.first(where: { $0.id == id })?.state, .cancelled,
+                       "cancelling a probing item marks it cancelled immediately")
+
+        // Let the (now-cancelled) probe unwind; its result must be discarded.
+        await gate.open()
+        await task.value
+
+        XCTAssertEqual(sut.items.count, 1, "the discarded probe result is NOT appended")
+        XCTAssertEqual(sut.items[0].state, .cancelled,
+                       "a cancelled probe stays cancelled even though it returned items")
+    }
+
+    // MARK: - S14: empty playlist feedback
+
+    func test_add_emptyPlaylist_marksPlaceholderFailedWithMessage() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = []   // playlist with no downloadable entries
+
+        await sut.add(url: "https://example.com/emptyplaylist")
+
+        XCTAssertEqual(sut.items.count, 1, "the placeholder is kept, not silently removed")
+        XCTAssertEqual(sut.items[0].state, .failed)
+        XCTAssertEqual(sut.items[0].errorMessage, "La playlist non contiene video disponibili.")
+    }
+
+    // MARK: - S12/P15: indexByID stays correct across placeholder replacement
+
+    func test_progress_updatesTheRightItem_afterPlaceholderExpandedToPlaylist() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+
+        // The middle item's index only becomes valid after replaceSubrange +
+        // index rebuild; drive a progress event straight at it.
+        let midID = sut.items[1].id
+        sut.startDownload(midID)
+        engine.emitProgress(midID, percent: 0.7, speed: "1 MB/s", eta: "0:10")
+        await waitUntil { sut.items[1].progress == 0.7 }
+
+        XCTAssertEqual(sut.items[1].progress, 0.7)
+        XCTAssertNil(sut.items[0].progress, "neighbouring rows are untouched")
+        XCTAssertNil(sut.items[2].progress)
+    }
+
+    // MARK: - S16: cancel everything on quit
+
+    func test_cancelAll_terminatesEngineAndCancelsRunningDownloads() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()   // both items downloading
+
+        sut.cancelAll()
+
+        XCTAssertEqual(engine.terminateAllCount, 1, "the engine is told to terminate all processes")
+        await waitUntil { sut.items.allSatisfy { $0.state == .cancelled } }
+        XCTAssertTrue(sut.items.allSatisfy { $0.state == .cancelled },
+                      "terminated downloads settle as cancelled")
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)

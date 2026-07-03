@@ -18,6 +18,16 @@ public final class QueueStore {
     private let binaries: BinaryProviding
     private let settings: SettingsStore
 
+    /// O(1) id→index map, kept in sync with every structural mutation of `items`
+    /// (append / replaceSubrange). Progress events fire ~10-20/s and each one
+    /// calls `updateItem`, so an `items.firstIndex(where:)` there is an O(n) scan
+    /// on a hot path — the map turns those lookups into O(1) (S12 / P15).
+    private var indexByID: [UUID: Int] = [:]
+
+    /// In-flight probe tasks keyed by the placeholder id, so a still-`.probing`
+    /// item can be cancelled (M1). Cleared once the probe finishes.
+    private var probingTasks: [UUID: Task<Void, Never>] = [:]
+
     public init(prober: MediaProbing, engine: Downloading,
                 binaries: BinaryProviding, settings: SettingsStore) {
         self.prober = prober
@@ -34,20 +44,45 @@ public final class QueueStore {
         // yt-dlp probe (spec §3.2 / §4).
         let placeholder = DownloadItem(url: url, state: .probing)
         let placeholderID = placeholder.id
-        items.append(placeholder)
+        appendItem(placeholder)
+
+        // Run the probe inside a stored, cancellable Task so `cancel(_:)` can kill
+        // an in-flight probe (M1). `add` still awaits the task, so callers that
+        // rely on items being populated on return keep working.
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performProbe(url: url, placeholderID: placeholderID)
+        }
+        probingTasks[placeholderID] = task
+        await task.value
+        probingTasks[placeholderID] = nil
+    }
+
+    private func performProbe(url: String, placeholderID: UUID) async {
         do {
             var probed = try await prober.probe(url: url)
+            // If we were cancelled mid-probe, `cancel(_:)` already moved the item
+            // to `.cancelled`; discard the result rather than overwrite it.
+            if Task.isCancelled { return }
             // Newly-added items inherit the user's default format (spec §5.2).
             for i in probed.indices { probed[i].selectedFormat = settings.defaultFormat }
-            // Replace the placeholder with the parsed `.ready` items.
-            if let index = items.firstIndex(where: { $0.id == placeholderID }) {
-                items.replaceSubrange(index...index, with: probed)
-            } else {
-                items.append(contentsOf: probed)
+            if probed.isEmpty {
+                // S14: an empty playlist becomes an explanatory failed row instead
+                // of silently vanishing (which left the list empty with no reason).
+                updateItem(placeholderID) {
+                    $0.state = .failed
+                    $0.errorMessage = "La playlist non contiene video disponibili."
+                }
+                return
             }
+            // Replace the placeholder with the parsed `.ready` items.
+            replaceItem(placeholderID, with: probed)
         } catch {
             // A probe failure never throws out of add; the placeholder becomes a
-            // failed row so the user sees why nothing was added.
+            // failed row so the user sees why nothing was added. If the task was
+            // cancelled, `cancel(_:)` already set `.cancelled` — don't clobber it
+            // with the process's termination error.
+            if Task.isCancelled { return }
             let message = (error as? DownloadError)?.userMessage ?? error.localizedDescription
             updateItem(placeholderID) {
                 $0.state = .failed
@@ -62,7 +97,7 @@ public final class QueueStore {
     private var runningTasks: [UUID: Task<Void, Never>] = [:]
 
     public func startDownload(_ id: UUID) {
-        guard let item = items.first(where: { $0.id == id }), item.state == .ready else { return }
+        guard let item = item(id), item.state == .ready else { return }
         updateItem(id) { $0.state = .queued }
         promoteQueued()
     }
@@ -87,15 +122,19 @@ public final class QueueStore {
 
     private func promoteQueued() {
         guard !isQueuePaused else { return }
-        while activeSlots < maxConcurrent,
+        // Compute the active count once and track promotions locally so the
+        // O(n) `activeSlots` filter isn't recomputed on every loop iteration.
+        var active = activeSlots
+        while active < maxConcurrent,
               let next = items.first(where: { $0.state == .queued }) {
             updateItem(next.id) { $0.state = .downloading }
             launch(next.id)
+            active += 1
         }
     }
 
     private func launch(_ id: UUID) {
-        guard let item = items.first(where: { $0.id == id }) else { return }
+        guard let item = item(id) else { return }
         let stream = engine.events(for: item, arguments: arguments(for: item))
         let task = Task { @MainActor in
             do {
@@ -144,7 +183,7 @@ public final class QueueStore {
             }
             // Fire the completion hook on the main actor so notifications are
             // posted even when the window is closed (spec §5.2 / §9).
-            if let finished = items.first(where: { $0.id == id }) {
+            if let finished = item(id) {
                 onItemFinished?(finished)
             }
         }
@@ -163,8 +202,13 @@ public final class QueueStore {
     // MARK: - Cancel
 
     public func cancel(_ id: UUID) {
-        guard let item = items.first(where: { $0.id == id }) else { return }
+        guard let item = item(id) else { return }
         switch item.state {
+        case .probing:
+            // Kill the in-flight probe process (via the stored Task's cancellation
+            // handler) and mark the row cancelled (M1).
+            probingTasks[id]?.cancel()
+            updateItem(id) { $0.state = .cancelled }
         case .ready, .queued:
             updateItem(id) { $0.state = .cancelled }
         case .downloading, .processing:
@@ -174,13 +218,20 @@ public final class QueueStore {
         }
     }
 
+    /// Cancel every in-flight probe and terminate every running download so no
+    /// orphaned yt-dlp process outlives the app. The app calls this on quit (S16).
+    public func cancelAll() {
+        for task in probingTasks.values { task.cancel() }
+        engine.terminateAll()
+    }
+
     // MARK: - Retry
 
     /// Reset a `.failed`/`.cancelled` item back to `.ready` — clearing its error
     /// and stale progress/stage — then re-enqueue it via `startDownload` (spec §7
     /// "Riprova"). A no-op for items in any other state.
     public func retry(_ id: UUID) {
-        guard let item = items.first(where: { $0.id == id }),
+        guard let item = item(id),
               item.state == .failed || item.state == .cancelled else { return }
         updateItem(id) {
             $0.state = .ready
@@ -194,15 +245,53 @@ public final class QueueStore {
     // MARK: - Format override
 
     public func setFormat(_ choice: FormatChoice, for id: UUID) {
-        guard let item = items.first(where: { $0.id == id }),
+        guard let item = item(id),
               item.state == .ready || item.state == .queued else { return }
         updateItem(id) { $0.selectedFormat = choice }
     }
 
     // MARK: - Helpers
 
+    /// O(1) lookup backed by `indexByID`.
+    private func item(_ id: UUID) -> DownloadItem? {
+        guard let index = indexByID[id], items.indices.contains(index) else { return nil }
+        return items[index]
+    }
+
     private func updateItem(_ id: UUID, _ mutate: (inout DownloadItem) -> Void) {
-        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        guard let index = indexByID[id], items.indices.contains(index) else { return }
         mutate(&items[index])
+    }
+
+    // MARK: - `items` maintenance (keeps `indexByID` in sync)
+
+    private func appendItem(_ item: DownloadItem) {
+        indexByID[item.id] = items.count
+        items.append(item)
+    }
+
+    private func appendItems(_ newItems: [DownloadItem]) {
+        for item in newItems {
+            indexByID[item.id] = items.count
+            items.append(item)
+        }
+    }
+
+    /// Replace the single item identified by `id` with `replacement`, keeping
+    /// `indexByID` correct. `replaceSubrange` shifts the indices of everything
+    /// after the edit, so the map is rebuilt (this happens once per add, off the
+    /// hot path — correctness over cleverness).
+    private func replaceItem(_ id: UUID, with replacement: [DownloadItem]) {
+        guard let index = indexByID[id] else {
+            appendItems(replacement)
+            return
+        }
+        items.replaceSubrange(index...index, with: replacement)
+        rebuildIndex()
+    }
+
+    private func rebuildIndex() {
+        indexByID.removeAll(keepingCapacity: true)
+        for (i, item) in items.enumerated() { indexByID[item.id] = i }
     }
 }
