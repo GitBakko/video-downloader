@@ -206,7 +206,11 @@ final class AppModel {
         let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard AppModel.looksLikeURL(candidate) else { return }
         guard candidate != lastClipboardSuggestion else { return }          // don't re-propose the same
-        guard urlField.isEmpty else { return }                              // don't overwrite typed text
+        // Fill an empty field, or REPLACE a previous auto-suggestion the user
+        // hasn't touched — but never clobber text the user actually typed. (Bug:
+        // only the first copied link was captured because the field still held the
+        // previous suggestion, so this guard rejected every later link.)
+        guard urlField.isEmpty || urlField == lastClipboardSuggestion else { return }
         guard !queue.items.contains(where: { $0.url == candidate }) else { return } // skip already added
         urlField = candidate
         lastClipboardSuggestion = candidate
