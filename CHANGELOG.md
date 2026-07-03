@@ -8,7 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Clipboard capture no longer fires at startup.** The app now ignores whatever
+  link is already on the clipboard when it launches and only proposes/auto-starts
+  links copied *after* it's running (a baseline is taken at launch and only later
+  changes count).
 
 ## [1.3.0] - 2026-07-03
 

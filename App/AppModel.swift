@@ -74,7 +74,10 @@ final class AppModel {
             })
             setupProgress = nil
             setupPhase = .ready
-            suggestClipboardURL()
+            // Deliberately DON'T capture whatever is already on the clipboard at
+            // launch — only links copied *after* the app is running should be
+            // proposed. `pollClipboard` enforces that via the
+            // `NSPasteboard.changeCount` baseline snapshotted at init.
             // Warm up yt-dlp in the background so the main window appears instantly.
             // (The onedir's one-time ~24s Gatekeeper scan used to freeze setup at 100%.)
             Task {
@@ -236,6 +239,11 @@ final class AppModel {
     /// this reliably catches a newly-copied link regardless of focus, unlike the
     /// old "only when the app regains focus" approach (which missed copies made
     /// while the app was already frontmost, hence "works only sometimes").
+    ///
+    /// The baseline is snapshotted at init (app launch), so whatever is already
+    /// on the clipboard when the app starts is ignored — only links copied *after*
+    /// launch are ever proposed. `pollClipboard` is therefore the single entry
+    /// point (there is intentionally no startup capture).
     @ObservationIgnored private var lastPasteboardChangeCount = NSPasteboard.general.changeCount
 
     func pollClipboard() {
@@ -245,7 +253,10 @@ final class AppModel {
         suggestClipboardURL()
     }
 
-    func suggestClipboardURL() {
+    /// Private on purpose: the only legitimate caller is `pollClipboard`, which
+    /// gates on `changeCount` so a pre-launch clipboard is never captured. Calling
+    /// this directly (e.g. at startup) would re-introduce that bug.
+    private func suggestClipboardURL() {
         guard let raw = NSPasteboard.general.string(forType: .string) else { return }
         let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard AppModel.looksLikeURL(candidate) else { return }
