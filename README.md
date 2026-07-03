@@ -18,6 +18,31 @@ Paste a URL, pick a format, download it — a clean SwiftUI front-end over
 
 ---
 
+## Screenshots
+
+<div align="center">
+  <img src="docs/assets/screenshots/main.png" alt="The main window: a queue of downloads, each with its source, thumbnail, status and a per-row format picker" width="860">
+</div>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/screenshots/format-picker.png" alt="The per-row format picker expanded, showing Video/Audio presets, a quality menu and Tutti i formati"></td>
+    <td width="50%"><img src="docs/assets/screenshots/history.png" alt="The Cronologia window: a searchable, filterable log of completed downloads"></td>
+  </tr>
+  <tr>
+    <td><sub><b>Hybrid format picker</b> — friendly presets by default, or expand to every available format. Audio-only extraction too.</sub></td>
+    <td><sub><b>Download history</b> — searchable and filterable (source, title, date), with one-click <i>re-queue</i>.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/assets/screenshots/settings.png" alt="The Settings window: destination folder, default format, auto-start and parallelism controls"></td>
+    <td><img src="docs/assets/screenshots/changelog.png" alt="The Novità window rendering the changelog grouped by version"></td>
+  </tr>
+  <tr>
+    <td><sub><b>Settings</b> — destination, default format, auto-start, and how many downloads run at once (overall and per site).</sub></td>
+    <td><sub><b>In-app release notes</b> — the changelog, rendered by version, with the current release marked.</sub></td>
+  </tr>
+</table>
+
 ## What it is
 
 Video Downloader is a small, focused **macOS 14+** app for personal use. It wraps the
