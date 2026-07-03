@@ -5,15 +5,26 @@ import VideoDownloaderCore
 struct DownloadRowView: View {
     let item: DownloadItem
     let queue: QueueStore
+    /// Download folder — used for the "Apri cartella" fallback when a completed
+    /// item has no known output file (P17).
+    let destination: URL
     let reveal: (URL) -> Void
     let onUpdateYtDlp: () -> Void
 
     @State private var expanded = false
     @State private var thumbImage: NSImage?
 
+    /// Thumbnail width + its trailing spacing, so the "Formato" disclosure can be
+    /// indented to line up under the title column instead of the row edge (P7).
+    private static let thumbWidth: CGFloat = 96
+    private static let thumbSpacing: CGFloat = 12
+    private var contentInset: CGFloat { Self.thumbWidth + Self.thumbSpacing }
+
     var body: some View {
+        // S1: no manual card background/padding — the List provides row chrome,
+        // separators, selection and keyboard navigation. Keep the internal layout.
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: Self.thumbSpacing) {
                 thumbnail
                 VStack(alignment: .leading, spacing: 4) {
                     sourceBadge
@@ -32,13 +43,19 @@ struct DownloadRowView: View {
                 actions
             }
 
-            DisclosureGroup("Formato", isExpanded: $expanded) {
-                FormatPickerView(item: item, queue: queue)
-                    .padding(.top, 4)
+            // P7: anchor the disclosure under the title column (indented past the
+            // thumbnail, with a subtle separator above it) so it reads as part of
+            // the row and the height doesn't feel disconnected when it expands.
+            VStack(alignment: .leading, spacing: 6) {
+                Divider()
+                DisclosureGroup("Formato", isExpanded: $expanded) {
+                    FormatPickerView(item: item, queue: queue)
+                        .padding(.top, 4)
+                }
             }
+            .padding(.leading, contentInset)
         }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+        .padding(.vertical, 4)
     }
 
     // MARK: Thumbnail
@@ -53,7 +70,7 @@ struct DownloadRowView: View {
                 placeholderThumb
             }
         }
-        .frame(width: 96, height: 54)
+        .frame(width: Self.thumbWidth, height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 6))
         .accessibilityHidden(true)
         .task(id: item.thumbnailURL) {
@@ -140,6 +157,14 @@ struct DownloadRowView: View {
                 if let out = item.outputPath {
                     Button { reveal(out) } label: {
                         Label("Mostra nel Finder", systemImage: "magnifyingglass")
+                    }
+                    .controlSize(.small)
+                } else {
+                    // P17: some HLS/live jobs finish without a resolvable output
+                    // file. Never leave the user with no action — reveal the
+                    // destination folder so they know where to look.
+                    Button { reveal(destination) } label: {
+                        Label("Apri cartella", systemImage: "folder")
                     }
                     .controlSize(.small)
                 }
