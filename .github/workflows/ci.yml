@@ -14,7 +14,7 @@ concurrency:
 jobs:
   test:
     name: Library tests (swift test)
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Swift version
@@ -26,9 +26,15 @@ jobs:
 
   app-build:
     name: App build (xcodebuild)
-    runs-on: macos-14
+    # macos-15 ships Xcode 16, which can read the objectVersion 77 project
+    # XcodeGen 2.45+ generates (Xcode 15 on macos-14 cannot).
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Select latest stable Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
