@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import VideoDownloaderCore
 
 struct DownloadRowView: View {
@@ -8,6 +9,7 @@ struct DownloadRowView: View {
     let onUpdateYtDlp: () -> Void
 
     @State private var expanded = false
+    @State private var thumbImage: NSImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -40,21 +42,25 @@ struct DownloadRowView: View {
     }
 
     // MARK: Thumbnail
+    // Decorative (the title + source name carry the meaning), so hidden from
+    // VoiceOver (S7). Loaded through `ThumbnailCache` so it doesn't flash on
+    // scroll like an uncached `AsyncImage` (M8).
     private var thumbnail: some View {
         Group {
-            if let url = item.thumbnailURL {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image): image.resizable().aspectRatio(contentMode: .fill)
-                    default: placeholderThumb
-                    }
-                }
+            if let thumbImage {
+                Image(nsImage: thumbImage).resizable().aspectRatio(contentMode: .fill)
             } else {
                 placeholderThumb
             }
         }
         .frame(width: 96, height: 54)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
+        .task(id: item.thumbnailURL) {
+            thumbImage = nil
+            guard let url = item.thumbnailURL else { return }
+            thumbImage = await ThumbnailCache.shared.image(for: url)
+        }
     }
 
     private var placeholderThumb: some View {
@@ -67,11 +73,18 @@ struct DownloadRowView: View {
     private var statusLine: some View {
         HStack(spacing: 6) {
             Circle().fill(stateColor).frame(width: 8, height: 8)
+                .accessibilityHidden(true)
             // Generic, state-derived label only — never the raw yt-dlp `item.stage`
             // token (a bv*+ba download resets the bar between the video/audio passes).
-            // Colored by state so the status reads at a glance (grey only while probing).
-            Text(stateLabel).font(.caption.weight(.medium)).foregroundStyle(stateColor)
+            // Colored by state so the status reads at a glance; low-contrast states
+            // (queued) use a legible label color while the dot stays vivid (S8).
+            Text(stateLabel).font(.caption.weight(.medium)).foregroundStyle(labelColor)
         }
+        // One VoiceOver element: the dot is decorative, the label carries the state.
+        // `.updatesFrequently` tells VoiceOver the value changes on its own (S6).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stateLabel)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     @ViewBuilder
@@ -80,9 +93,9 @@ struct DownloadRowView: View {
         case .downloading:
             VStack(alignment: .leading, spacing: 2) {
                 if let p = item.progress {
-                    ProgressView(value: p)
+                    ProgressView("Scaricamento in corso", value: p).labelsHidden()
                 } else {
-                    ProgressView().controlSize(.small)
+                    ProgressView("Scaricamento in corso").controlSize(.small).labelsHidden()
                 }
                 HStack(spacing: 10) {
                     Text("Scaricamento…")   // generic label from state, not item.stage
@@ -171,6 +184,20 @@ struct DownloadRowView: View {
         case .cancelled: return .orange
         }
     }
+
+    /// Color for the status *text*. Matches `stateColor` except for `.queued`,
+    /// whose vivid `.yellow` dot is unreadable as caption text on the near-white
+    /// card — the label uses an amber that stays legible in Light *and* Dark (S8).
+    private var labelColor: Color {
+        item.state == .queued ? Self.queuedLabelColor : stateColor
+    }
+
+    private static let queuedLabelColor = Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        return isDark
+            ? NSColor(red: 1.00, green: 0.84, blue: 0.38, alpha: 1) // bright amber on dark
+            : NSColor(red: 0.55, green: 0.40, blue: 0.00, alpha: 1) // dark amber on light
+    })
 
     private var stateLabel: String {
         switch item.state {
