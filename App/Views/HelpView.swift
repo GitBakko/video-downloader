@@ -136,6 +136,9 @@ struct HelpView: View {
             } else {
                 TextField("Cerca un sito…", text: $query)
                     .textFieldStyle(.roundedBorder)
+                // S5: no fixed maxHeight → the list flows in the page's own
+                // ScrollView instead of being a hidden nested scroll region that
+                // felt truncated. `LazyVStack` keeps it cheap for ~1800 rows.
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(filtered, id: \.self) { name in
                         Text(name)
@@ -145,7 +148,6 @@ struct HelpView: View {
                         Divider()
                     }
                 }
-                .frame(maxHeight: 240)
             }
 
             Link(destination: URL(string: "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md")!) {
