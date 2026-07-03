@@ -28,8 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The row's **"Formato"** section always shows the picker now (a `DisclosureGroup`
   nested inside a `List` could render empty).
-- **Clipboard capture** now proposes links copied *after* the first one (the
-  "don't overwrite typed text" guard was rejecting every later link).
+- **Clipboard capture** is now reliable: the app polls the pasteboard on a timer,
+  so a copied link is caught whether or not the app has focus (it used to check
+  only when the app regained focus, so it "worked only sometimes").
 
 ## [1.1.0] - 2026-07-03
 
