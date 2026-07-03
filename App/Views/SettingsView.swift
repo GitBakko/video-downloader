@@ -23,6 +23,14 @@ struct SettingsView: View {
                 FormatPresetPicker(choice: $settings.defaultFormat)
             }
 
+            Section("Download") {
+                Toggle("Avvia i download automaticamente", isOn: $settings.autoStartDownloads)
+                Text("Quando è attivo, un link incollato o rilevato dagli appunti parte da solo, senza premere “Scarica”.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Extra") {
                 Toggle("Incorpora copertina e metadati", isOn: $settings.embedThumbnailAndMetadata)
             }

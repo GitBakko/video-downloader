@@ -19,6 +19,11 @@ public final class SettingsStore {
     public var embedThumbnailAndMetadata: Bool {
         didSet { defaults.set(embedThumbnailAndMetadata, forKey: Keys.embed) }
     }
+    /// When on, a newly-added link starts downloading immediately (no manual
+    /// "Scarica"), whether it was typed/pasted or auto-detected from the clipboard.
+    public var autoStartDownloads: Bool {
+        didSet { defaults.set(autoStartDownloads, forKey: Keys.autoStart) }
+    }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -29,6 +34,7 @@ public final class SettingsStore {
         }
         defaultFormat = Self.decode(defaults.string(forKey: Keys.defaultFormat)) ?? .video(.best)
         embedThumbnailAndMetadata = defaults.object(forKey: Keys.embed) as? Bool ?? false
+        autoStartDownloads = defaults.object(forKey: Keys.autoStart) as? Bool ?? false
     }
 
     /// The value consumed by Phase 6's `QueueStore` / `ArgumentBuilder` (Task 1b.3 type).
@@ -47,6 +53,7 @@ public final class SettingsStore {
         static let destination = "settings.destination"
         static let defaultFormat = "settings.defaultFormat"
         static let embed = "settings.embedThumbnailAndMetadata"
+        static let autoStart = "settings.autoStartDownloads"
     }
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import VideoDownloaderCore
 
 /// Help window: what the app is, how it works, and the list of supported sites.
@@ -58,9 +59,9 @@ struct HelpView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 12) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(.tint)
+                Image(nsImage: NSApplication.shared.applicationIconImage)
+                    .resizable()
+                    .frame(width: 48, height: 48)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Video Downloader").font(.title2).bold()

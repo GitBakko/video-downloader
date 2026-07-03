@@ -89,6 +89,12 @@ public final class QueueStore {
             }
             // Replace the placeholder with the (deduplicated) parsed `.ready` items.
             replaceItem(placeholderID, with: deduped)
+            // Auto-start them if the user enabled it (Settings toggle) — this makes
+            // any add (typed, pasted, or clipboard-detected) begin downloading at once.
+            if settings.autoStartDownloads {
+                for newItem in deduped { updateItem(newItem.id) { $0.state = .queued } }
+                promoteQueued()
+            }
         } catch {
             // A probe failure never throws out of add; the placeholder becomes a
             // failed row so the user sees why nothing was added. If the task was

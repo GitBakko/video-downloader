@@ -4,6 +4,7 @@ import VideoDownloaderCore
 
 struct MainWindowView: View {
     @Environment(AppModel.self) private var app
+    @State private var autoSubmitTask: Task<Void, Never>?
 
     var body: some View {
         @Bindable var app = app
@@ -43,6 +44,43 @@ struct MainWindowView: View {
                 downloadAllButton
                 queueMenu
             }
+        }
+        .overlay(alignment: .top) { toastOverlay }
+        .animation(.spring(duration: 0.35), value: app.toast)
+    }
+
+    // MARK: Toast (clipboard capture etc.)
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let toast = app.toast {
+            HStack(spacing: 7) {
+                Image(systemName: "doc.on.clipboard.fill").accessibilityHidden(true)
+                Text(toast)
+            }
+            .font(.callout.weight(.medium))
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .background(.regularMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(.quaternary))
+            .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    /// With auto-start enabled, debounce the URL field and submit it once it holds
+    /// one-or-more complete URLs — so a paste (or a typed link) downloads by itself.
+    private func scheduleAutoSubmit(_ value: String) {
+        guard app.settings.autoStartDownloads else { return }
+        autoSubmitTask?.cancel()
+        autoSubmitTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 800_000_000)
+            guard !Task.isCancelled, app.urlField == value else { return }
+            let lines = value.split(whereSeparator: \.isNewline)
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            guard !lines.isEmpty, lines.allSatisfy(AppModel.looksLikeURL) else { return }
+            app.addFromField()
         }
     }
 
@@ -89,6 +127,9 @@ struct MainWindowView: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...3)
                     .onSubmit { app.addFromField() }
+                    // With auto-start on, a pasted/typed complete URL submits itself
+                    // (debounced) so the whole flow is hands-free.
+                    .onChange(of: app.urlField) { _, value in scheduleAutoSubmit(value) }
                 // S3: the entry action is the primary one on this bar.
                 Button("Aggiungi") { app.addFromField() }
                     .buttonStyle(.borderedProminent)

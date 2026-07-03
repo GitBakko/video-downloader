@@ -397,6 +397,21 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertTrue(sut.items.isEmpty)
     }
 
+    func test_add_autoStartsWhenSettingEnabled() async {
+        let prober = FakeProber()
+        let settings = makeEphemeralSettings()
+        settings.autoStartDownloads = true
+        let sut = QueueStore(prober: prober, engine: FakeEngine(),
+                             binaries: FakeBinaries(), settings: settings)
+        prober.itemsToReturn = makeReadyItems(2)
+
+        await sut.add(url: "https://example.com/playlist")
+
+        // With auto-start on, newly-added items begin at once (up to maxConcurrent).
+        await waitUntil { sut.items.filter { $0.state == .downloading }.count == 2 }
+        XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)
