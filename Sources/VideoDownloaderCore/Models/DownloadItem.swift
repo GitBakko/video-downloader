@@ -8,6 +8,8 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
     public var title: String?
     public var thumbnailURL: URL?
     public var duration: TimeInterval?
+    /// yt-dlp extractor key (e.g. "Youtube", "Vimeo"); drives the source badge in the UI.
+    public var source: String?
     public var availableFormats: [MediaFormat]
     public var selectedFormat: FormatChoice
     public var state: DownloadState
@@ -24,6 +26,7 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         title: String? = nil,
         thumbnailURL: URL? = nil,
         duration: TimeInterval? = nil,
+        source: String? = nil,
         availableFormats: [MediaFormat] = [],
         selectedFormat: FormatChoice = .video(.best),
         state: DownloadState = .probing,
@@ -39,6 +42,7 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         self.title = title
         self.thumbnailURL = thumbnailURL
         self.duration = duration
+        self.source = source
         self.availableFormats = availableFormats
         self.selectedFormat = selectedFormat
         self.state = state

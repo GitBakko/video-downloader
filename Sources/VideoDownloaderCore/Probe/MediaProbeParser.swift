@@ -23,6 +23,7 @@ public enum MediaProbeParser {
             title: info.title,
             thumbnailURL: info.thumbnail.flatMap { URL(string: $0) },
             duration: info.duration,
+            source: info.extractorKey,
             availableFormats: (info.formats ?? []).map(mapFormat),
             selectedFormat: .video(.best),   // neutral default; QueueStore.add applies the real default
             state: .ready,
