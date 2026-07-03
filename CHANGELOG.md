@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.1.0] - 2026-07-03
+
 ### Added
 - **Source favicon** next to each video — the origin site's real favicon, cached
   on disk per host and deduplicated across concurrent lookups (a 30-item playlist
