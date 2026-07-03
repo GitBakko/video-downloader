@@ -203,6 +203,21 @@ final class AppModel {
     }
 
     // MARK: Clipboard proposal (spec §3.6 / §5.2)
+
+    /// macOS has no pasteboard-change event, so the view polls this on a timer.
+    /// We track `NSPasteboard.changeCount` and only act when it actually changes —
+    /// this reliably catches a newly-copied link regardless of focus, unlike the
+    /// old "only when the app regains focus" approach (which missed copies made
+    /// while the app was already frontmost, hence "works only sometimes").
+    @ObservationIgnored private var lastPasteboardChangeCount = NSPasteboard.general.changeCount
+
+    func pollClipboard() {
+        let changeCount = NSPasteboard.general.changeCount
+        guard changeCount != lastPasteboardChangeCount else { return }
+        lastPasteboardChangeCount = changeCount
+        suggestClipboardURL()
+    }
+
     func suggestClipboardURL() {
         guard let raw = NSPasteboard.general.string(forType: .string) else { return }
         let candidate = raw.trimmingCharacters(in: .whitespacesAndNewlines)

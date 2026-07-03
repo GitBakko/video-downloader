@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Combine
 import VideoDownloaderCore
 
 struct RootView: View {
@@ -23,8 +24,15 @@ struct RootView: View {
         .task {
             if app.setupPhase != .ready { await app.bootstrap() }
         }
+        // macOS has no pasteboard-change event, so poll the clipboard on a timer:
+        // a copied link is caught whether or not the app has focus (the old
+        // "only on focus regain" check missed most copies). Plus an instant check
+        // when the app becomes active.
+        .onReceive(Timer.publish(every: 0.6, on: .main, in: .common).autoconnect()) { _ in
+            if app.setupPhase == .ready { app.pollClipboard() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            if app.setupPhase == .ready { app.suggestClipboardURL() }
+            if app.setupPhase == .ready { app.pollClipboard() }
         }
     }
 
