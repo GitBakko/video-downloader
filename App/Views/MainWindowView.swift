@@ -34,6 +34,7 @@ struct MainWindowView: View {
             // Destination + queue controls
             HStack(spacing: 10) {
                 Image(systemName: "folder")
+                    .accessibilityHidden(true)
                 Text(settings.destination.path(percentEncoded: false))
                     .lineLimit(1).truncationMode(.middle)
                     .foregroundStyle(.secondary)
@@ -45,6 +46,7 @@ struct MainWindowView: View {
                           systemImage: app.queue.isQueuePaused ? "play.fill" : "pause.fill")
                 }
                 .controlSize(.small)
+                .accessibilityValue(app.queue.isQueuePaused ? "in pausa" : "in esecuzione")
                 Button { app.queue.startAll() } label: {
                     Label("Scarica tutti", systemImage: "arrow.down.circle.fill")
                 }
@@ -53,6 +55,21 @@ struct MainWindowView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+
+            if let destinationError = app.destinationError {
+                // Clear, app-side message when the folder can't be written to (P16).
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .accessibilityHidden(true)
+                    Text(destinationError)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .font(.caption)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -86,6 +103,7 @@ struct MainWindowView: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "tray").font(.system(size: 36)).foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text("Nessun download").foregroundStyle(.secondary)
             Text("Incolla un URL e premi Aggiungi.").font(.caption).foregroundStyle(.secondary)
         }

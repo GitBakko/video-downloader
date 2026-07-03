@@ -30,17 +30,25 @@ struct SettingsView: View {
             Section("Componenti") {
                 LabeledContent("yt-dlp") {
                     HStack(spacing: 8) {
-                        Text(app.binaries.ytDlpVersion ?? "sconosciuta")
+                        // Read the observable mirror on AppModel so the version
+                        // refreshes after warm-up / update (M7).
+                        Text(app.ytDlpVersion ?? "sconosciuta")
                             .foregroundStyle(.secondary)
                         if app.updatingYtDlp { ProgressView().controlSize(.small) }
                         Button("Aggiorna") { app.updateYtDlp() }
                             .disabled(app.updatingYtDlp)
                     }
                 }
+                if let updateError = app.updateError {
+                    // Surface a failed update instead of swallowing it (M2).
+                    Text(updateError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
         .formStyle(.grouped)
-        .padding(20)
     }
 
     private func chooseDestination() {

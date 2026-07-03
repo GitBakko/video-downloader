@@ -25,6 +25,17 @@ final class AppModel {
     var setupProgress: Double?
     var urlField: String = ""
     var updatingYtDlp: Bool = false
+    /// Observable mirror of `binaries.ytDlpVersion` (which isn't observable itself),
+    /// so Settings updates when the warm-up / update finishes (M7).
+    var ytDlpVersion: String?
+    /// Last yt-dlp update failure, shown under the Settings row; `nil` when the
+    /// last update succeeded or none has run (M2).
+    var updateError: String?
+    /// Set when the destination folder can't be written to, surfaced above the
+    /// queue so a start doesn't fail later with a raw yt-dlp errno (P16).
+    var destinationError: String?
+    /// Guards against a rapid double-tap of "Riprova" spawning two bootstraps (S15).
+    private var bootstrapping = false
     private var lastClipboardSuggestion: String?
     private let notificationPresenter = NotificationForegroundPresenter()
 
@@ -45,22 +56,26 @@ final class AppModel {
 
     // MARK: Bootstrap (spec §5.1)
     func bootstrap() async {
+        bootstrapping = true                 // set before the first await (S15)
+        defer { bootstrapping = false }
         setupPhase = .installing("Scarico i componenti necessari (yt-dlp, ffmpeg)…")
         setupProgress = nil
         do {
             try await binaries.ensureInstalled(onProgress: { [weak self] frac in
-                Task { @MainActor in
-                    guard let self else { return }
-                    // Ignore stray late reports once we've left the installing phase.
-                    if case .installing = self.setupPhase { self.setupProgress = frac }
-                }
+                // Each callback hops onto the main actor via its own Task, so
+                // reports can drain out of order; funnel through a single
+                // monotonic setter so the bar never jumps backwards (P12).
+                Task { @MainActor in self?.reportSetupProgress(frac) }
             })
             setupProgress = nil
             setupPhase = .ready
             suggestClipboardURL()
             // Warm up yt-dlp in the background so the main window appears instantly.
             // (The onedir's one-time ~24s Gatekeeper scan used to freeze setup at 100%.)
-            Task { await binaries.prepareYtDlp() }
+            Task {
+                await binaries.prepareYtDlp()
+                ytDlpVersion = binaries.ytDlpVersion   // publish for Settings (M7)
+            }
         } catch {
             setupProgress = nil
             setupPhase = .failed(error.localizedDescription)
@@ -71,8 +86,16 @@ final class AppModel {
         Task { await requestNotificationAuthorization() }
     }
 
+    /// Monotonic, main-actor-isolated progress setter: only moves the bar forward
+    /// and only while still installing, so out-of-order drains can't rewind it (P12).
+    private func reportSetupProgress(_ frac: Double) {
+        guard case .installing = setupPhase else { return }
+        if frac >= (setupProgress ?? 0) { setupProgress = frac }
+    }
+
     func retrySetup() {
         guard case .failed = setupPhase else { return }
+        guard !bootstrapping else { return }   // ignore a double-tap while one is running (S15)
         Task { await bootstrap() }
     }
 
@@ -83,6 +106,9 @@ final class AppModel {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         guard !urls.isEmpty else { return }
+        // Pre-flight the destination so a broken folder shows a clear message here
+        // instead of surfacing later as a raw yt-dlp errno mid-download (P16).
+        destinationError = validateDestination()
         lastClipboardSuggestion = urls.last
         urlField = ""
         // `QueueStore.add(url:)` is `async` (it awaits the yt-dlp probe), so it
@@ -96,13 +122,42 @@ final class AppModel {
         }
     }
 
+    /// Returns a user-facing message if the download folder can't be written to,
+    /// otherwise `nil`. Creates the folder if it's simply missing (P16).
+    private func validateDestination() -> String? {
+        let dest = settings.destination
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        if !fm.fileExists(atPath: dest.path, isDirectory: &isDir) {
+            do {
+                try fm.createDirectory(at: dest, withIntermediateDirectories: true)
+            } catch {
+                return "Impossibile creare la cartella di destinazione (\(dest.path(percentEncoded: false))). Scegline un'altra dalle Impostazioni."
+            }
+        } else if !isDir.boolValue {
+            return "La destinazione non è una cartella (\(dest.path(percentEncoded: false))). Scegline un'altra dalle Impostazioni."
+        }
+        if !fm.isWritableFile(atPath: dest.path) {
+            return "La cartella di destinazione non è scrivibile (\(dest.path(percentEncoded: false))). Scegline un'altra dalle Impostazioni."
+        }
+        return nil
+    }
+
     // MARK: Update yt-dlp (spec §5.3)
     func updateYtDlp() {
         guard !updatingYtDlp else { return }
         updatingYtDlp = true
+        updateError = nil
         Task {
             defer { updatingYtDlp = false }
-            try? await binaries.updateYtDlp()
+            do {
+                try await binaries.updateYtDlp()
+                updateError = nil
+                ytDlpVersion = binaries.ytDlpVersion   // reflect the new version (M7)
+            } catch {
+                // Surface the failure instead of swallowing it with `try?` (M2).
+                updateError = error.localizedDescription
+            }
         }
     }
 
@@ -185,10 +240,17 @@ final class NotificationForegroundPresenter: NSObject, UNUserNotificationCenterD
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let action = response.actionIdentifier
-        if action == Self.revealActionID || action == UNNotificationDefaultActionIdentifier,
-           let path = response.notification.request.content.userInfo[Self.outputPathKey] as? String {
-            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        let path: String? = (action == Self.revealActionID || action == UNNotificationDefaultActionIdentifier)
+            ? response.notification.request.content.userInfo[Self.outputPathKey] as? String
+            : nil
+        // `NSWorkspace` is a main-thread API but this delegate can be called off
+        // the main thread, so hop onto the main actor before touching it — and
+        // call the completion handler from there too (S10).
+        Task { @MainActor in
+            if let path {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            }
+            completionHandler()
         }
-        completionHandler()
     }
 }
