@@ -16,9 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or auto-detected from the clipboard starts downloading immediately — no manual
   *Scarica*.
 - A floating **in-app toast** when a link is captured from the clipboard.
+- **Configurable concurrency** (Settings → Download): how many downloads run at
+  once overall *and* per source/site.
 
 ### Changed
-- The **Help** window header now shows the real app icon.
+- The **Help** and **first-launch setup** screens now show the real app icon.
 - yt-dlp now uses an installed **JavaScript runtime** (deno/node/bun, resolved by
   absolute path) so YouTube extraction uses the proper web client — faster and more
   reliable than the deprecated fallback.
