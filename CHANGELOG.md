@@ -8,7 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Source favicon** next to each video — shows the origin site's real favicon,
+  cached on disk per host and deduplicated across concurrent lookups (a 30-item
+  playlist fetches each site's icon only once).
+
+### Changed
+- **Much faster format detection.** yt-dlp now uses the *onedir* build instead of
+  the self-extracting *onefile*, so each probe/download starts in **<1s** instead
+  of ~24s (after a one-time first-run warm-up absorbed by the setup screen).
+- Component binaries (yt-dlp, ffmpeg, ffprobe) now **download in parallel** at
+  first launch instead of one after another.
+
+### Fixed
+- The status dot **and** label now colour by state (were always grey), so
+  ready/queued/downloading/completed/etc. read at a glance.
 
 ## [1.0.0] - 2026-07-03
 
