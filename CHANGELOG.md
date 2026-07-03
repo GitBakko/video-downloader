@@ -9,20 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Source favicon** next to each video — shows the origin site's real favicon,
-  cached on disk per host and deduplicated across concurrent lookups (a 30-item
-  playlist fetches each site's icon only once).
+- **Source favicon** next to each video — the origin site's real favicon, cached
+  on disk per host and deduplicated across concurrent lookups (a 30-item playlist
+  fetches each site's icon only once).
+- **Help window** (⌘? / Help menu) with a description of the app, how it works,
+  popular-site chips, and a searchable list of all ~1800 sites yt-dlp supports.
+- A pre-flight check of the download folder, with a clear message if it's missing
+  or not writable (instead of a raw error mid-download).
 
 ### Changed
 - **Much faster format detection.** yt-dlp now uses the *onedir* build instead of
   the self-extracting *onefile*, so each probe/download starts in **<1s** instead
-  of ~24s (after a one-time first-run warm-up absorbed by the setup screen).
-- Component binaries (yt-dlp, ffmpeg, ffprobe) now **download in parallel** at
-  first launch instead of one after another.
+  of ~24s (after a one-time first-run warm-up).
+- **Snappier first launch** — component binaries download in parallel, and the
+  one-time yt-dlp warm-up runs in the background so the window no longer freezes
+  at 100%.
+- **More native macOS UI** — the download queue is now a real `List`, window
+  chrome moved into a proper toolbar, a compact first-launch setup window, and
+  clearer primary/secondary buttons.
+- Menu bar (and About) now read **"Video Downloader"**.
 
 ### Fixed
-- The status dot **and** label now colour by state (were always grey), so
-  ready/queued/downloading/completed/etc. read at a glance.
+- Status dot **and** label now colour by state (were always grey).
+- **Accessibility**: VoiceOver labels for the format pickers, the format table,
+  status, and progress; decorative favicons/thumbnails/icons hidden; better
+  contrast for the "queued" state.
+- **Robustness**: a probing item can now be cancelled (and its yt-dlp process is
+  killed); setup/update failures show a readable Italian message instead of
+  "error 0"; "Aggiorna yt-dlp" no longer fails silently; an all-unavailable
+  playlist reports it; re-adding a playlist no longer duplicates its videos; and
+  in-flight downloads are stopped when you quit (no orphaned processes).
+- The yt-dlp version in Settings now updates live once the warm-up finishes.
+- Thumbnails are cached, so they no longer flash while scrolling the queue.
 
 ## [1.0.0] - 2026-07-03
 
