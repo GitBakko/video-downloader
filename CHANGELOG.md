@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **Concurrent downloads no longer wedge in "Preparazione".** Each download's
+  stdout/stderr was read with `FileHandle.bytes`, whose blocking `read()` tied up
+  a Swift-concurrency thread per pipe; a few simultaneous downloads exhausted the
+  cooperative pool, so the queue stalled and cancellation lagged (or never
+  confirmed). Pipes are now read off the pool via a GCD readability source.
 
 ## [1.3.1] - 2026-07-03
 

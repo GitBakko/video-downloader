@@ -56,10 +56,16 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
                     try process.run()
 
                     // Read stdout and stderr CONCURRENTLY so a full pipe buffer
-                    // never blocks the child process (classic deadlock).
-                    try await withThrowingTaskGroup(of: Void.self) { group in
+                    // never blocks the child process (classic deadlock). The lines
+                    // come from a GCD readability source (see `lines(of:)`), NOT
+                    // `FileHandle.bytes`, whose blocking read would wedge a
+                    // cooperative-pool thread per pipe and starve the pool once a
+                    // few downloads run at once.
+                    let outLines = DownloadEngine.lines(of: stdoutPipe.fileHandleForReading)
+                    let errLines = DownloadEngine.lines(of: stderrPipe.fileHandleForReading)
+                    await withTaskGroup(of: Void.self) { group in
                         group.addTask {
-                            for try await line in stdoutPipe.fileHandleForReading.bytes.lines {
+                            for await line in outLines {
                                 if let dest = DownloadEngine.destination(from: line) {
                                     await state.setDestination(dest)
                                 }
@@ -77,11 +83,11 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
                             }
                         }
                         group.addTask {
-                            for try await line in stderrPipe.fileHandleForReading.bytes.lines {
+                            for await line in errLines {
                                 await state.appendStderr(line)
                             }
                         }
-                        try await group.waitForAll()
+                        await group.waitForAll()
                     }
 
                     await terminated.wait()
@@ -141,6 +147,46 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
 
     private func remove(_ id: UUID) {
         lock.lock(); processes[id] = nil; lock.unlock()
+    }
+
+    // MARK: - Non-blocking line reader
+
+    /// Streams `handle`'s bytes as lines WITHOUT blocking a Swift-concurrency
+    /// thread. `FileHandle.bytes.lines` runs a synchronous `read()` on the calling
+    /// cooperative-pool thread; with several concurrent downloads (two pipes each)
+    /// those blocked reads exhaust the pool and every download wedges in
+    /// "Preparazione" until one is cancelled (freeing a thread). A GCD readability
+    /// source keeps the blocking read off the cooperative pool.
+    ///
+    /// Splits on `\n` and `\r` — yt-dlp rewrites its progress line with a bare `\r`
+    /// (matching the old `.lines` behaviour so `ProgressParser` still sees each
+    /// progress update). Empty lines (e.g. the `\n` of a `\r\n`) are dropped.
+    static func lines(of handle: FileHandle) -> AsyncStream<String> {
+        AsyncStream { continuation in
+            var buffer = Data()
+            handle.readabilityHandler = { fh in
+                let chunk = fh.availableData
+                guard !chunk.isEmpty else {   // EOF: the process closed the pipe
+                    if !buffer.isEmpty, let tail = String(data: buffer, encoding: .utf8), !tail.isEmpty {
+                        continuation.yield(tail)
+                    }
+                    fh.readabilityHandler = nil
+                    continuation.finish()
+                    return
+                }
+                buffer.append(chunk)
+                while let nl = buffer.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+                    let lineData = buffer[buffer.startIndex..<nl]
+                    if let line = String(data: lineData, encoding: .utf8), !line.isEmpty {
+                        continuation.yield(line)
+                    }
+                    buffer.removeSubrange(buffer.startIndex...nl)
+                }
+            }
+            continuation.onTermination = { _ in
+                handle.readabilityHandler = nil
+            }
+        }
     }
 
     /// Picks the last non-empty stderr line, preferring an `ERROR:` line if any.

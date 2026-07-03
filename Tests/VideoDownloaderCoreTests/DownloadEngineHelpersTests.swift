@@ -66,4 +66,19 @@ final class DownloadEngineHelpersTests: XCTestCase {
     func test_outputDirectory_nilWhenNoOutputFlag() {
         XCTAssertNil(DownloadEngine.outputDirectory(from: ["-f", "best", "--newline"]))
     }
+
+    // Guards the non-blocking pipe reader: split on \n AND \r (yt-dlp's progress
+    // uses a bare \r), drop the empty piece of a \r\n, and flush the un-terminated
+    // tail at EOF. This is the reader that replaced the pool-starving
+    // `FileHandle.bytes.lines`.
+    func test_lines_splitsOnNewlineAndCarriageReturn_andFlushesTail() async throws {
+        let pipe = Pipe()
+        let stream = DownloadEngine.lines(of: pipe.fileHandleForReading)
+        try pipe.fileHandleForWriting.write(contentsOf: Data("alpha\nbeta\rgamma\r\ndelta".utf8))
+        try pipe.fileHandleForWriting.close()   // EOF → flush "delta"
+
+        var lines: [String] = []
+        for await line in stream { lines.append(line) }
+        XCTAssertEqual(lines, ["alpha", "beta", "gamma", "delta"])
+    }
 }
