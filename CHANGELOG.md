@@ -8,7 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Queue management**: remove a single video (right-click a row → *Rimuovi dalla
+  coda*), and a *Coda* toolbar menu to *Rimuovi i completati*, *Rimuovi i terminati*,
+  or *Svuota la coda*. Removing an active item stops its download first.
+
+### Changed
+- yt-dlp now uses an installed **JavaScript runtime** (deno/node/bun, resolved by
+  absolute path) so YouTube extraction uses the proper web client — faster and more
+  reliable than the deprecated fallback.
+- A download that hasn't reported a percentage yet shows **"Preparazione"** (yt-dlp
+  is still extracting the page/formats) instead of a stuck-looking "Scaricamento".
+
+### Fixed
+- The row's **"Formato"** section always shows the picker now (a `DisclosureGroup`
+  nested inside a `List` could render empty).
+- **Clipboard capture** now proposes links copied *after* the first one (the
+  "don't overwrite typed text" guard was rejecting every later link).
 
 ## [1.1.0] - 2026-07-03
 
