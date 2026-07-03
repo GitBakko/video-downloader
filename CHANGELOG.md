@@ -12,8 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Queue management**: remove a single video (right-click a row → *Rimuovi dalla
   coda*), and a *Coda* toolbar menu to *Rimuovi i completati*, *Rimuovi i terminati*,
   or *Svuota la coda*. Removing an active item stops its download first.
+- **Auto-start toggle** (Settings → Download): when on, a link that's typed, pasted,
+  or auto-detected from the clipboard starts downloading immediately — no manual
+  *Scarica*.
+- A floating **in-app toast** when a link is captured from the clipboard.
 
 ### Changed
+- The **Help** window header now shows the real app icon.
 - yt-dlp now uses an installed **JavaScript runtime** (deno/node/bun, resolved by
   absolute path) so YouTube extraction uses the proper web client — faster and more
   reliable than the deprecated fallback.
