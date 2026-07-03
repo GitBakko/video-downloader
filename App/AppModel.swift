@@ -58,6 +58,9 @@ final class AppModel {
             setupProgress = nil
             setupPhase = .ready
             suggestClipboardURL()
+            // Warm up yt-dlp in the background so the main window appears instantly.
+            // (The onedir's one-time ~24s Gatekeeper scan used to freeze setup at 100%.)
+            Task { await binaries.prepareYtDlp() }
         } catch {
             setupProgress = nil
             setupPhase = .failed(error.localizedDescription)

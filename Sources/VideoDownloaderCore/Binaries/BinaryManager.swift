@@ -235,10 +235,24 @@ public final class BinaryManager: BinaryProviding, @unchecked Sendable {
                 try await group.waitForAll()
             }
         }
-        // Warm-up: the first run of the freshly extracted yt-dlp pays a one-time
-        // ~30s Gatekeeper scan. Doing it here — behind the progress bar — means
-        // the user's first real probe is already fast.
+    }
+
+    /// Warm up yt-dlp and cache its version. The freshly extracted onedir pays a
+    /// one-time ~24s Gatekeeper scan on its first run, so this is deliberately NOT
+    /// awaited inside `ensureInstalled` — the app calls it in the background AFTER
+    /// reaching the main window, so a frozen 100% progress bar never blocks the UI.
+    public func prepareYtDlp() async {
         setYtDlpVersion(try? await readYtDlpVersion())
+    }
+
+    /// The sites/extractors yt-dlp supports (`yt-dlp --list-extractors`), for the
+    /// Help window. Returns `[]` if yt-dlp isn't installed yet or the call fails.
+    public func listExtractors() async -> [String] {
+        guard let out = try? await Self.run(layout.ytDlpURL.path, ["--list-extractors"]) else { return [] }
+        return out
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
     }
 
     /// Spec §5.3: re-download the latest yt-dlp (the onedir zip), re-extract it,
