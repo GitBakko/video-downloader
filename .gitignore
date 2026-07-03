@@ -42,3 +42,9 @@ Carthage/Build/
 
 # XcodeGen-generated project (source of truth is App/project.yml)
 /App/VideoDownloader.xcodeproj/
+
+# Claude Code local settings
+.claude/
+
+# Release build artifacts (the distributable .app is attached to GitHub Releases)
+/dist/

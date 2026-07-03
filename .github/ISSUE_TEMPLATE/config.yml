@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: yt-dlp supported sites
+    url: https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md
+    about: Whether a given site can be downloaded is determined by yt-dlp — check here first.
