@@ -197,7 +197,9 @@ final class AppModel {
         }
         let request = UNNotificationRequest(identifier: item.id.uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
-        NSSound(named: NSSound.Name("Glass"))?.play()
+        // A fresh copy per play, so two near-simultaneous completions don't collide
+        // on the shared named sound (which logs "NSSound … Already playing").
+        (NSSound(named: NSSound.Name("Glass"))?.copy() as? NSSound)?.play()
     }
 
     // MARK: Clipboard proposal (spec §3.6 / §5.2)
