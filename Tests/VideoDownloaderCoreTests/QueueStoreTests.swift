@@ -353,6 +353,50 @@ final class QueueStoreTests: XCTestCase {
                       "terminated downloads settle as cancelled")
     }
 
+    // MARK: - Queue management: remove / removeCompleted / clearAll
+
+    func test_remove_dropsSingleItem_andKeepsIndexConsistent() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        XCTAssertEqual(sut.items.count, 3)
+
+        let victim = sut.items[1].id
+        let survivor = sut.items[2].id
+        sut.remove(victim)
+
+        XCTAssertEqual(sut.items.count, 2)
+        XCTAssertFalse(sut.items.contains { $0.id == victim })
+        // The index is rebuilt after removal: driving the survivor still hits it.
+        sut.startDownload(survivor)
+        engine.emitProgress(survivor, percent: 0.5)
+        await waitUntil { sut.items.first(where: { $0.id == survivor })?.progress == 0.5 }
+        XCTAssertEqual(sut.items.first(where: { $0.id == survivor })?.progress, 0.5)
+    }
+
+    func test_removeCompleted_dropsCompletedKeepsTheRest() async {
+        let (sut, prober, engine) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)
+        await sut.add(url: "https://example.com/playlist")
+        sut.startAll()                       // both downloading
+        let first = sut.items[0].id
+        engine.finish(first)                 // first → completed
+        await waitUntil { sut.items.first(where: { $0.id == first })?.state == .completed }
+
+        sut.removeCompleted()
+
+        XCTAssertEqual(sut.items.count, 1, "only the completed item is removed")
+        XCTAssertFalse(sut.items.contains { $0.id == first })
+    }
+
+    func test_clearAll_emptiesTheQueue() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(3)
+        await sut.add(url: "https://example.com/playlist")
+        sut.clearAll()
+        XCTAssertTrue(sut.items.isEmpty)
+    }
+
     func test_setFormat_allowedWhileReady_rejectedOnceDownloading() async {
         let (sut, prober, _) = makeSUT()
         prober.itemsToReturn = makeReadyItems(1)

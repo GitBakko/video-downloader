@@ -41,8 +41,40 @@ struct MainWindowView: View {
                 .accessibilityValue(app.queue.isQueuePaused ? "in pausa" : "in esecuzione")
 
                 downloadAllButton
+                queueMenu
             }
         }
+    }
+
+    // MARK: Queue management menu (remove completed / clear all)
+
+    @ViewBuilder
+    private var queueMenu: some View {
+        let items = app.queue.items
+        let hasCompleted = items.contains { $0.state == .completed }
+        let hasFinished = items.contains { $0.state == .completed || $0.state == .failed || $0.state == .cancelled }
+
+        Menu {
+            Button { app.queue.removeCompleted() } label: {
+                Label("Rimuovi i completati", systemImage: "checkmark.circle")
+            }
+            .disabled(!hasCompleted)
+
+            Button { app.queue.removeFinished() } label: {
+                Label("Rimuovi i terminati (completati/errori/annullati)", systemImage: "clear")
+            }
+            .disabled(!hasFinished)
+
+            Divider()
+
+            Button(role: .destructive) { app.queue.clearAll() } label: {
+                Label("Svuota la coda", systemImage: "trash")
+            }
+        } label: {
+            Label("Coda", systemImage: "ellipsis.circle")
+        }
+        .help("Gestisci la coda: rimuovi i completati, i terminati, o svuota tutto")
+        .disabled(items.isEmpty)
     }
 
     // MARK: Add bar (S2 / S3)

@@ -72,6 +72,15 @@ struct DownloadRowView: View {
             .padding(.leading, contentInset)
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            if item.state == .completed, let out = item.outputPath {
+                Button { reveal(out) } label: { Label("Mostra nel Finder", systemImage: "magnifyingglass") }
+                Divider()
+            }
+            Button(role: .destructive) { queue.remove(item.id) } label: {
+                Label("Rimuovi dalla coda", systemImage: "trash")
+            }
+        }
     }
 
     // MARK: Thumbnail

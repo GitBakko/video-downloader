@@ -240,6 +240,43 @@ public final class QueueStore {
         engine.terminateAll()
     }
 
+    // MARK: - Removing (queue management)
+
+    /// Remove a single item, stopping any work tied to it first.
+    public func remove(_ id: UUID) { removeItems { $0.id == id } }
+
+    /// Remove the successfully-downloaded items, keeping everything still active,
+    /// queued, ready, or failed ("elimina i video scaricati, lascia i download").
+    public func removeCompleted() { removeItems { $0.state == .completed } }
+
+    /// Remove every item in a terminal state (completed, failed, or cancelled) —
+    /// a one-tap cleanup that leaves only the in-progress / pending rows.
+    public func removeFinished() {
+        removeItems { $0.state == .completed || $0.state == .failed || $0.state == .cancelled }
+    }
+
+    /// Empty the whole queue, stopping all in-flight probes and downloads.
+    public func clearAll() { removeItems { _ in true } }
+
+    /// Shared removal: cancels any probe/download tied to a removed item, drops the
+    /// items, rebuilds the index, and promotes queued items into any freed slots.
+    private func removeItems(_ shouldRemove: (DownloadItem) -> Bool) {
+        let removed = items.filter(shouldRemove)
+        guard !removed.isEmpty else { return }
+        for item in removed {
+            switch item.state {
+            case .probing:               probingTasks[item.id]?.cancel()
+            case .downloading, .processing: engine.cancel(item.id) // SIGTERM the yt-dlp process
+            default:                     break
+            }
+            probingTasks[item.id] = nil
+        }
+        let ids = Set(removed.map(\.id))
+        items.removeAll { ids.contains($0.id) }
+        rebuildIndex()
+        promoteQueued()   // removing an active item frees a slot for a queued one
+    }
+
     // MARK: - Retry
 
     /// Reset a `.failed`/`.cancelled` item back to `.ready` — clearing its error
