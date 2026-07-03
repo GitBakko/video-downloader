@@ -8,6 +8,8 @@ struct HelpView: View {
     @State private var extractors: [String] = []
     @State private var loading = true
     @State private var query = ""
+    /// Debounced, off-main filter results published back for display (S13).
+    @State private var filtered: [String] = []
 
     /// A handful of well-known sites, shown as favicon chips (always visible,
     /// even before the full yt-dlp extractor list loads).
@@ -17,11 +19,6 @@ struct HelpView: View {
         ("Twitch", "twitch.tv"), ("Reddit", "reddit.com"), ("SoundCloud", "soundcloud.com"),
         ("Dailymotion", "dailymotion.com"), ("Bluesky", "bsky.app"), ("Bilibili", "bilibili.com"),
     ]
-
-    private var filtered: [String] {
-        let q = query.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty ? extractors : extractors.filter { $0.localizedCaseInsensitiveContains(q) }
-    }
 
     var body: some View {
         ScrollView {
@@ -36,8 +33,23 @@ struct HelpView: View {
         }
         .frame(minWidth: 520, minHeight: 560)
         .task {
-            extractors = await app.binaries.listExtractors()
+            let list = await app.binaries.listExtractors()
+            extractors = list
+            filtered = list          // empty query → everything, no flash of "0 di N"
             loading = false
+        }
+        // Debounce keystrokes (~150ms) and filter ~1800 strings off the main actor
+        // so typing never janks the window (S13). `.task(id:)` auto-cancels the
+        // previous run when `query` changes again, giving the debounce for free.
+        .task(id: query) {
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if Task.isCancelled { return }
+            let q = query.trimmingCharacters(in: .whitespaces)
+            let source = extractors
+            let result = await Task.detached(priority: .userInitiated) {
+                q.isEmpty ? source : source.filter { $0.localizedCaseInsensitiveContains(q) }
+            }.value
+            if !Task.isCancelled { filtered = result }
         }
     }
 
@@ -49,6 +61,7 @@ struct HelpView: View {
                 Image(systemName: "arrow.down.circle.fill")
                     .font(.system(size: 34))
                     .foregroundStyle(.tint)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Video Downloader").font(.title2).bold()
                     Text("v\(Bundle.main.shortVersion)").font(.caption).foregroundStyle(.secondary)
@@ -78,7 +91,9 @@ struct HelpView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("\(n)")
                 .font(.caption.bold()).foregroundStyle(.white)
-                .frame(width: 18, height: 18).background(Circle().fill(.tint))
+                .padding(3)
+                .frame(minWidth: 18, minHeight: 18)   // grows with Dynamic Type instead of clipping (P10)
+                .background(Circle().fill(.tint))
             Text(text).font(.callout).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -133,9 +148,11 @@ struct HelpView: View {
                 .frame(maxHeight: 240)
             }
 
-            Link("Elenco completo e aggiornato di yt-dlp ↗",
-                 destination: URL(string: "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md")!)
-                .font(.callout)
+            Link(destination: URL(string: "https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md")!) {
+                // SF Symbol scales with the text instead of the raw "↗" glyph (P5).
+                Label("Elenco completo e aggiornato di yt-dlp", systemImage: "arrow.up.right")
+            }
+            .font(.callout)
         }
     }
 }
