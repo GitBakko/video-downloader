@@ -27,8 +27,11 @@ final class DownloadItemTests: XCTestCase {
 
     func test_equatable() {
         let id = UUID()
-        let a = DownloadItem(id: id, url: "u", state: .ready)
-        let b = DownloadItem(id: id, url: "u", state: .ready)
+        // Pin `addedAt` so the two independently-built items are otherwise identical
+        // (the default `Date()` would differ by the construction interval).
+        let addedAt = Date()
+        let a = DownloadItem(id: id, url: "u", state: .ready, addedAt: addedAt)
+        let b = DownloadItem(id: id, url: "u", state: .ready, addedAt: addedAt)
         var c = a
         c.state = .completed
         XCTAssertEqual(a, b)

@@ -19,6 +19,10 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
     public var eta: String?
     public var outputPath: URL?
     public var errorMessage: String?
+    /// When the item entered the queue. Used by the download history as the
+    /// "added" date; defaults to now at creation. Trailing (with a default) so
+    /// every existing call site keeps compiling.
+    public var addedAt: Date
 
     public init(
         id: UUID = UUID(),
@@ -35,7 +39,8 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         speed: String? = nil,
         eta: String? = nil,
         outputPath: URL? = nil,
-        errorMessage: String? = nil
+        errorMessage: String? = nil,
+        addedAt: Date = Date()
     ) {
         self.id = id
         self.url = url
@@ -52,6 +57,7 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         self.eta = eta
         self.outputPath = outputPath
         self.errorMessage = errorMessage
+        self.addedAt = addedAt
     }
 
     /// Convenience mirror of `state.allowsFormatEditing` used by the queue/UI.
