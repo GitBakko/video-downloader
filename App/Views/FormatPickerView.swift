@@ -47,7 +47,7 @@ struct FormatPresetPicker: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Picker("", selection: kindBinding) {
+            Picker("Tipo di formato", selection: kindBinding) {
                 ForEach(FormatKind.allCases) { Text($0.rawValue).tag($0) }
             }
             .labelsHidden()
@@ -55,7 +55,7 @@ struct FormatPresetPicker: View {
             .fixedSize()
 
             if choice.uiKind == .video {
-                Picker("", selection: videoQualityBinding) {
+                Picker("Qualità video", selection: videoQualityBinding) {
                     ForEach(VideoQuality.uiOrder, id: \.self) { Text($0.uiLabel).tag($0) }
                 }
                 .labelsHidden()
@@ -118,13 +118,14 @@ struct FormatPickerView: View {
     private var formatsTable: some View {
         VStack(spacing: 0) {
             ForEach(item.availableFormats, id: \.formatID) { fmt in
+                let isSelected = item.selectedFormat.uiSpecificID == fmt.formatID
                 Button {
                     queue.setFormat(.specific(formatID: fmt.formatID), for: item.id)
                 } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: item.selectedFormat.uiSpecificID == fmt.formatID
-                              ? "largecircle.fill.circle" : "circle")
+                        Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                             .foregroundStyle(.tint)
+                            .accessibilityHidden(true)
                         Text(fmt.formatID).frame(width: 60, alignment: .leading).monospaced()
                         Text(fmt.resolution ?? "—").frame(width: 66, alignment: .leading)
                         Text(fmt.ext).frame(width: 56, alignment: .leading)
@@ -141,6 +142,8 @@ struct FormatPickerView: View {
                     .padding(.vertical, 3)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Formato \(fmt.formatID), \(fmt.resolution ?? "—"), \(fmt.ext)")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
                 Divider()
             }
         }

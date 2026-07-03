@@ -9,6 +9,7 @@ struct SetupView: View {
             Image(systemName: "arrow.down.app")
                 .font(.system(size: 52))
                 .foregroundStyle(.tint)
+                .accessibilityHidden(true)
             Text("Video Downloader").font(.title2).bold()
 
             switch app.setupPhase {
