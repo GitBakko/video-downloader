@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.2.0] - 2026-07-03
+
 ### Added
 - **Download history** (*Cronologia*): a persistent, searchable log of completed
   downloads in its own window (View menu → *Cronologia download*, ⌘Y, or the
