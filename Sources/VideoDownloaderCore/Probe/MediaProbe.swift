@@ -80,7 +80,9 @@ public struct MediaProbe: MediaProbing {
     public func probe(url: String) async throws -> [DownloadItem] {
         let result = try await runner.run(
             executable: binaries.ytDlpURL,
-            arguments: ["-J", "--no-warnings", url]
+            // A JS runtime (if available) makes YouTube extraction use the proper
+            // web client — faster/more reliable than the deprecated fallback.
+            arguments: ["-J", "--no-warnings"] + JSRuntimeResolver.arguments + [url]
         )
         guard result.exitCode == 0 else {
             let stderr = String(data: result.stderr, encoding: .utf8) ?? ""

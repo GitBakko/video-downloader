@@ -209,6 +209,9 @@ public final class QueueStore {
             item: item,
             settings: settings.downloadSettings,
             ffmpegDirectory: binaries.ffmpegDirectory)
+        // Use a JS runtime (if one is installed) so YouTube uses the proper web
+        // client during download extraction too — same reasoning as the probe.
+        + JSRuntimeResolver.arguments
     }
 
     // MARK: - Cancel

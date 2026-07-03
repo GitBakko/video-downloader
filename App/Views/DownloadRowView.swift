@@ -111,12 +111,12 @@ struct DownloadRowView: View {
             // token (a bv*+ba download resets the bar between the video/audio passes).
             // Colored by state so the status reads at a glance; low-contrast states
             // (queued) use a legible label color while the dot stays vivid (S8).
-            Text(stateLabel).font(.caption.weight(.medium)).foregroundStyle(labelColor)
+            Text(displayLabel).font(.caption.weight(.medium)).foregroundStyle(labelColor)
         }
         // One VoiceOver element: the dot is decorative, the label carries the state.
         // `.updatesFrequently` tells VoiceOver the value changes on its own (S6).
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(stateLabel)
+        .accessibilityLabel(displayLabel)
         .accessibilityAddTraits(.updatesFrequently)
     }
 
@@ -131,7 +131,7 @@ struct DownloadRowView: View {
                     ProgressView("Scaricamento in corso").controlSize(.small).labelsHidden()
                 }
                 HStack(spacing: 10) {
-                    Text("Scaricamento…")   // generic label from state, not item.stage
+                    Text(displayLabel + "…")   // "Preparazione…" during extraction, else "Scaricamento…"
                     if let s = item.speed { Text(s) }
                     if let e = item.eta { Text("ETA \(e)") }
                 }
@@ -239,6 +239,14 @@ struct DownloadRowView: View {
             ? NSColor(red: 1.00, green: 0.84, blue: 0.38, alpha: 1) // bright amber on dark
             : NSColor(red: 0.55, green: 0.40, blue: 0.00, alpha: 1) // dark amber on light
     })
+
+    /// Like `stateLabel`, but a `.downloading` item with no percentage yet is still
+    /// in yt-dlp's *extraction* phase (analysing the page/formats), not transferring
+    /// bytes — show "Preparazione" so a slow-to-extract site doesn't look stuck.
+    private var displayLabel: String {
+        if item.state == .downloading && item.progress == nil { return "Preparazione" }
+        return stateLabel
+    }
 
     private var stateLabel: String {
         switch item.state {

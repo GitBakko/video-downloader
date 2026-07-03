@@ -39,7 +39,11 @@ final class MediaProbeTests: XCTestCase {
         _ = try? await probe.probe(url: "https://example.com/watch?v=x")
 
         XCTAssertEqual(spy.receivedExecutable, exe)
-        XCTAssertEqual(spy.receivedArguments, ["-J", "--no-warnings", "https://example.com/watch?v=x"])
+        // Core args are fixed at the ends; optional `--js-runtimes <name>:<path>`
+        // may appear in between when a JS runtime is installed (env-dependent).
+        let args = spy.receivedArguments ?? []
+        XCTAssertEqual(Array(args.prefix(2)), ["-J", "--no-warnings"])
+        XCTAssertEqual(args.last, "https://example.com/watch?v=x")
     }
 
     func test_probe_throws_lastSignificantStderrLine_on_nonzero_exit() async {
