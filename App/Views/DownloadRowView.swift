@@ -44,13 +44,29 @@ struct DownloadRowView: View {
             }
 
             // P7: anchor the disclosure under the title column (indented past the
-            // thumbnail, with a subtle separator above it) so it reads as part of
-            // the row and the height doesn't feel disconnected when it expands.
+            // thumbnail, with a subtle separator above it). A hand-rolled disclosure
+            // (button + conditional content) rather than `DisclosureGroup`, because a
+            // nested `DisclosureGroup` inside a `List` row can render its content
+            // empty/zero-height on macOS.
             VStack(alignment: .leading, spacing: 6) {
                 Divider()
-                DisclosureGroup("Formato", isExpanded: $expanded) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0))
+                        Text("Formato").font(.subheadline)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if expanded {
                     FormatPickerView(item: item, queue: queue)
-                        .padding(.top, 4)
+                        .padding(.top, 2)
                 }
             }
             .padding(.leading, contentInset)
