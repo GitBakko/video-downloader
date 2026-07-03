@@ -75,8 +75,20 @@ public final class QueueStore {
                 }
                 return
             }
-            // Replace the placeholder with the parsed `.ready` items.
-            replaceItem(placeholderID, with: probed)
+            // S17: re-adding a playlist URL re-probes the same videos; drop any
+            // whose URL is already queued so they aren't duplicated. The placeholder
+            // itself is excluded from the "already present" set — for a single video
+            // its URL equals the probed item's, and matching it would wrongly drop it.
+            let existingURLs = Set(items.lazy.filter { $0.id != placeholderID }.map(\.url))
+            let deduped = probed.filter { !existingURLs.contains($0.url) }
+            guard !deduped.isEmpty else {
+                // Everything was already queued — remove the placeholder so a
+                // re-add of an already-added playlist is a silent no-op.
+                replaceItem(placeholderID, with: [])
+                return
+            }
+            // Replace the placeholder with the (deduplicated) parsed `.ready` items.
+            replaceItem(placeholderID, with: deduped)
         } catch {
             // A probe failure never throws out of add; the placeholder becomes a
             // failed row so the user sees why nothing was added. If the task was

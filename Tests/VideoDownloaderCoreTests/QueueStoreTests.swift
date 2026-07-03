@@ -285,6 +285,39 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertEqual(sut.items[0].errorMessage, "La playlist non contiene video disponibili.")
     }
 
+    // MARK: - S17: re-adding a playlist doesn't duplicate its videos
+
+    func test_add_reAddingSamePlaylist_doesNotDuplicateItems() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)
+
+        await sut.add(url: "https://example.com/playlist")
+        XCTAssertEqual(sut.items.count, 2)
+
+        // Re-adding the same playlist URL re-probes and returns the same videos;
+        // they must be deduped by URL rather than appended again (S17).
+        await sut.add(url: "https://example.com/playlist")
+
+        XCTAssertEqual(sut.items.count, 2, "already-queued videos are not duplicated")
+        XCTAssertEqual(Set(sut.items.map { $0.url }).count, 2)
+    }
+
+    func test_add_reAddingPlaylistWithNewItem_appendsOnlyTheNewOne() async {
+        let (sut, prober, _) = makeSUT()
+        prober.itemsToReturn = makeReadyItems(2)   // video/0, video/1
+        await sut.add(url: "https://example.com/playlist")
+        XCTAssertEqual(sut.items.count, 2)
+
+        prober.itemsToReturn = makeReadyItems(3)   // video/0, video/1, video/2
+        await sut.add(url: "https://example.com/playlist")
+
+        XCTAssertEqual(sut.items.count, 3, "only the genuinely-new video is appended")
+        XCTAssertEqual(sut.items.map { $0.url },
+                       ["https://example.com/video/0",
+                        "https://example.com/video/1",
+                        "https://example.com/video/2"])
+    }
+
     // MARK: - S12/P15: indexByID stays correct across placeholder replacement
 
     func test_progress_updatesTheRightItem_afterPlaceholderExpandedToPlaylist() async {
