@@ -18,6 +18,8 @@ final class AppModel {
     let settings: SettingsStore
     let binaries: BinaryManager
     let queue: QueueStore
+    /// Persistent log of successful downloads, shown in the Cronologia window.
+    let history: HistoryStore
 
     // UI state
     var setupPhase: SetupPhase = .installing("Verifica dei componenti…")
@@ -47,10 +49,13 @@ final class AppModel {
         self.settings = settings
         self.binaries = binaries
         self.queue = QueueStore(prober: prober, engine: engine, binaries: binaries, settings: settings)
+        self.history = HistoryStore()
         // Announce completions from the queue itself, so items that finish while
-        // the window is closed are still notified (spec §5.2 / §9).
+        // the window is closed are still notified (spec §5.2 / §9) — and record
+        // them in the persistent history (only completed items reach this hook).
         self.queue.onItemFinished = { [weak self] item in
             self?.postFinishedNotification(for: item)
+            self?.history.record(item)
         }
     }
 
@@ -164,6 +169,28 @@ final class AppModel {
     // MARK: Reveal in Finder (spec §5.2)
     func revealInFinder(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
+    // MARK: History actions (Cronologia window)
+
+    /// Re-download a past entry: re-add its URL to the queue and bring the main
+    /// queue window forward so the user sees the new row appear.
+    func requeue(_ entry: HistoryEntry) {
+        Task { await queue.add(url: entry.url) }
+        NSApp.activate(ignoringOtherApps: true)
+        // Raise the main queue window — not the Cronologia/Aiuto/Impostazioni
+        // auxiliary windows the action might have been triggered from.
+        let auxTitles: Set<String> = ["Cronologia", "Aiuto — Video Downloader", "Impostazioni", "Settings"]
+        NSApp.windows
+            .first { $0.canBecomeMain && !auxTitles.contains($0.title) }?
+            .makeKeyAndOrderFront(nil)
+    }
+
+    /// Reveal a history entry's downloaded file in the Finder, when its path is
+    /// still known (reuses the queue's Finder helper).
+    func revealHistoryFile(_ entry: HistoryEntry) {
+        guard let path = entry.outputPath else { return }
+        revealInFinder(URL(fileURLWithPath: path))
     }
 
     // MARK: Notifications + sound (spec §5.2 / §9)

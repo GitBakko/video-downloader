@@ -4,6 +4,7 @@ import VideoDownloaderCore
 
 struct MainWindowView: View {
     @Environment(AppModel.self) private var app
+    @Environment(\.openWindow) private var openWindow
     @State private var autoSubmitTask: Task<Void, Never>?
 
     var body: some View {
@@ -31,6 +32,13 @@ struct MainWindowView: View {
                     Label(settings.destination.lastPathComponent, systemImage: "folder")
                 }
                 .help("Salva in: \(settings.destination.path(percentEncoded: false))\nClic per scegliere un'altra cartella")
+            }
+
+            ToolbarItem(placement: .automatic) {
+                Button { openWindow(id: "history") } label: {
+                    Label("Cronologia", systemImage: "clock.arrow.circlepath")
+                }
+                .help("Apri la cronologia dei download")
             }
 
             ToolbarItemGroup(placement: .primaryAction) {

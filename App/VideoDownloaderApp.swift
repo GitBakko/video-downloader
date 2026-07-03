@@ -27,7 +27,16 @@ struct VideoDownloaderApp: App {
                 Button("Aggiorna yt-dlp") { app.updateYtDlp() }
                     .disabled(app.updatingYtDlp)
             }
+            CommandGroup(after: .sidebar) {
+                HistoryMenuButton()
+            }
         }
+
+        Window("Cronologia", id: "history") {
+            HistoryView()
+                .environment(app)
+        }
+        .windowResizability(.contentSize)
 
         Window("Aiuto — Video Downloader", id: "help") {
             HelpView()
@@ -49,6 +58,15 @@ private struct HelpMenuButton: View {
     var body: some View {
         Button("Aiuto Video Downloader") { openWindow(id: "help") }
             .keyboardShortcut("?", modifiers: .command)
+    }
+}
+
+/// Menu command (View menu) that opens the download history window.
+private struct HistoryMenuButton: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("Cronologia download") { openWindow(id: "history") }
+            .keyboardShortcut("y", modifiers: .command)
     }
 }
 
