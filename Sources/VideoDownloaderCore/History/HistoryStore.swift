@@ -14,6 +14,10 @@ public final class HistoryStore {
     public private(set) var entries: [HistoryEntry] = []
 
     @ObservationIgnored private let fileURL: URL
+    /// Serial queue for disk writes so rapid `record`s persist in order — two
+    /// unordered `Task.detached` writes could otherwise race and leave the file
+    /// holding an older snapshot (a newer write finishing before an older one).
+    @ObservationIgnored private let writeQueue = DispatchQueue(label: "HistoryStore.write", qos: .utility)
 
     public init(fileURL: URL = HistoryStore.defaultFileURL) {
         self.fileURL = fileURL
@@ -77,7 +81,7 @@ public final class HistoryStore {
     private func persist() {
         guard let data = try? Self.makeEncoder().encode(entries) else { return }
         let url = fileURL
-        Task.detached(priority: .utility) {
+        writeQueue.async {
             let directory = url.deletingLastPathComponent()
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try? data.write(to: url, options: .atomic)
