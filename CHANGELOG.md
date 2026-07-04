@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.4.0] - 2026-07-04
+
 ### Added
 - **The download list is now persistent.** Closing the app and reopening it
   brings back the same rows: completed downloads stay listed, and anything that
