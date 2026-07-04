@@ -72,7 +72,7 @@ public final class SettingsStore {
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)
 
-    static func encode(_ choice: FormatChoice) -> String {
+    nonisolated static func encode(_ choice: FormatChoice) -> String {
         switch choice {
         case .video(let q):     return "video:\(videoToken(q))"
         case .audio:            return "audio:best"
@@ -80,7 +80,7 @@ public final class SettingsStore {
         }
     }
 
-    static func decode(_ raw: String?) -> FormatChoice? {
+    nonisolated static func decode(_ raw: String?) -> FormatChoice? {
         guard let raw, let sep = raw.firstIndex(of: ":") else { return nil }
         let kind = String(raw[..<sep])
         let value = String(raw[raw.index(after: sep)...])
@@ -92,7 +92,7 @@ public final class SettingsStore {
         }
     }
 
-    private static func videoToken(_ q: VideoQuality) -> String {
+    private nonisolated static func videoToken(_ q: VideoQuality) -> String {
         switch q {
         case .best:  return "best"
         case .p1080: return "1080"
@@ -101,7 +101,7 @@ public final class SettingsStore {
         }
     }
 
-    private static func videoFromToken(_ s: String) -> VideoQuality {
+    private nonisolated static func videoFromToken(_ s: String) -> VideoQuality {
         switch s {
         case "1080": return .p1080
         case "720":  return .p720

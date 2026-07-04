@@ -48,7 +48,11 @@ final class AppModel {
         let engine = DownloadEngine(binaries: binaries)
         self.settings = settings
         self.binaries = binaries
-        self.queue = QueueStore(prober: prober, engine: engine, binaries: binaries, settings: settings)
+        // The queue persists its whole list to `queue.json` and restores it here,
+        // so closing the app and reopening brings the same rows back.
+        self.queue = QueueStore(prober: prober, engine: engine, binaries: binaries,
+                                settings: settings,
+                                persistenceURL: QueueStore.defaultPersistenceURL)
         self.history = HistoryStore()
         // Announce completions from the queue itself, so items that finish while
         // the window is closed are still notified (spec §5.2 / §9) — and record
@@ -74,6 +78,9 @@ final class AppModel {
             })
             setupProgress = nil
             setupPhase = .ready
+            // Surface any downloads interrupted by a previous quit/crash (leftover
+            // `.part` files) so the user can resume or delete them.
+            buildRecovery()
             // Deliberately DON'T capture whatever is already on the clipboard at
             // launch — only links copied *after* the app is running should be
             // proposed. `pollClipboard` enforces that via the
@@ -196,6 +203,46 @@ final class AppModel {
         revealInFinder(URL(fileURLWithPath: path))
     }
 
+    // MARK: - Recovery of orphaned partial files
+
+    /// Leftover `.part` files in the destination that DON'T belong to any item in
+    /// the (now persisted + restored) queue — e.g. files from a download the user
+    /// removed while it was running, or from before queue persistence existed.
+    /// Non-empty ⇒ the cleanup sheet is shown. Interrupted downloads that ARE
+    /// still in the list aren't shown here: they reappear as resumable rows.
+    var recovery: [RecoveryItem] = []
+
+    /// Scan the destination for partial files and keep only the orphans — those
+    /// whose media id matches no restored queue item. yt-dlp resumes an in-list
+    /// download from its `.part` automatically, so those need no prompt; only the
+    /// truly orphaned leftovers are offered for deletion.
+    func buildRecovery() {
+        let knownMediaIDs = Set(queue.items.compactMap(\.mediaID))
+        recovery = PartialScanner.scan(directory: settings.destination)
+            .filter { partial in
+                // Orphan unless a live queue row already owns this media id.
+                guard let mediaID = partial.mediaID else { return true }
+                return !knownMediaIDs.contains(mediaID)
+            }
+            .map(RecoveryItem.init)
+    }
+
+    /// Delete one orphan's leftover files and drop its row.
+    func deleteRecovery(_ item: RecoveryItem) {
+        PartialScanner.delete(item.files)
+        recovery.removeAll { $0.id == item.id }
+    }
+
+    /// Delete every orphan's leftover files and close the sheet.
+    func deleteAllRecovery() {
+        for item in recovery { PartialScanner.delete(item.files) }
+        recovery = []
+    }
+
+    /// Close the sheet without touching files — offered again next launch while
+    /// the leftovers still exist.
+    func dismissRecovery() { recovery = [] }
+
     // MARK: Notifications + sound (spec §5.2 / §9)
     func requestNotificationAuthorization() async {
         let center = UNUserNotificationCenter.current()
@@ -297,6 +344,24 @@ final class AppModel {
         guard !s.isEmpty, !s.contains(where: { $0 == " " || $0.isNewline }) else { return false }
         guard let url = URL(string: s), let scheme = url.scheme?.lowercased() else { return false }
         return (scheme == "http" || scheme == "https") && (url.host?.isEmpty == false)
+    }
+}
+
+/// One row in the cleanup sheet — an orphaned partial download (`.part` files on
+/// disk with no matching queue row), which can only be deleted.
+struct RecoveryItem: Identifiable {
+    let partial: PartialScanner.Partial
+
+    init(_ partial: PartialScanner.Partial) { self.partial = partial }
+
+    var id: String { partial.id }
+    var title: String { partial.baseName }
+    /// The leftover filename, shown under the title.
+    var detail: String? { partial.files.first?.lastPathComponent }
+    var files: [URL] { partial.files }
+    var sizeText: String? {
+        guard partial.totalSize > 0 else { return nil }
+        return ByteCountFormatter.string(fromByteCount: partial.totalSize, countStyle: .file)
     }
 }
 

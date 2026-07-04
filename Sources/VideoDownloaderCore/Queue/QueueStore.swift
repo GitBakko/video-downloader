@@ -18,6 +18,15 @@ public final class QueueStore {
     private let binaries: BinaryProviding
     private let settings: SettingsStore
 
+    /// Where the whole list is snapshotted so it survives a quit (`queue.json`).
+    /// Optional so tests and the pure library can construct an in-memory queue
+    /// with no disk I/O by leaving it `nil`.
+    @ObservationIgnored private let persistenceURL: URL?
+    @ObservationIgnored private let writeQueue = DispatchQueue(label: "QueueStore.persist", qos: .utility)
+    /// Debounces saves so a burst of changes coalesces into one write (nil until
+    /// the first change). `@ObservationIgnored` — internal bookkeeping, not UI.
+    @ObservationIgnored private var saveTask: Task<Void, Never>?
+
     /// O(1) id→index map, kept in sync with every structural mutation of `items`
     /// (append / replaceSubrange). Progress events fire ~10-20/s and each one
     /// calls `updateItem`, so an `items.firstIndex(where:)` there is an O(n) scan
@@ -29,12 +38,30 @@ public final class QueueStore {
     private var probingTasks: [UUID: Task<Void, Never>] = [:]
 
     public init(prober: MediaProbing, engine: Downloading,
-                binaries: BinaryProviding, settings: SettingsStore) {
+                binaries: BinaryProviding, settings: SettingsStore,
+                persistenceURL: URL? = nil) {
         self.prober = prober
         self.engine = engine
         self.binaries = binaries
         self.settings = settings
+        self.persistenceURL = persistenceURL
+        // Restore the list a previous session left behind. Interrupted downloads
+        // come back `.ready` (see `restoredAcrossLaunch`); nothing auto-starts.
+        if let persistenceURL {
+            items = Self.loadSnapshot(from: persistenceURL).map { $0.toItem() }
+            rebuildIndex()
+        }
     }
+
+    /// `~/Library/Application Support/VideoDownloader/queue.json`.
+    public nonisolated static var defaultPersistenceURL: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("VideoDownloader/queue.json", isDirectory: false)
+    }
+
+    /// Any item in a terminal state — drives the quit-time "remove finished from
+    /// the list?" prompt.
+    public var hasFinishedItems: Bool { items.contains { $0.state.isTerminal } }
 
     // MARK: - Adding
 
@@ -335,7 +362,11 @@ public final class QueueStore {
 
     private func updateItem(_ id: UUID, _ mutate: (inout DownloadItem) -> Void) {
         guard let index = indexByID[id], items.indices.contains(index) else { return }
+        let before = items[index]
         mutate(&items[index])
+        // Re-save only when a persisted field changed — the ~10-20/s progress
+        // updates (which don't) never touch the disk (see `durablyDiffers`).
+        if items[index].durablyDiffers(from: before) { scheduleSave() }
     }
 
     // MARK: - `items` maintenance (keeps `indexByID` in sync)
@@ -343,6 +374,7 @@ public final class QueueStore {
     private func appendItem(_ item: DownloadItem) {
         indexByID[item.id] = items.count
         items.append(item)
+        scheduleSave()
     }
 
     private func appendItems(_ newItems: [DownloadItem]) {
@@ -350,6 +382,7 @@ public final class QueueStore {
             indexByID[item.id] = items.count
             items.append(item)
         }
+        scheduleSave()
     }
 
     /// Replace the single item identified by `id` with `replacement`, keeping
@@ -363,10 +396,59 @@ public final class QueueStore {
         }
         items.replaceSubrange(index...index, with: replacement)
         rebuildIndex()
+        scheduleSave()
     }
 
     private func rebuildIndex() {
         indexByID.removeAll(keepingCapacity: true)
         for (i, item) in items.enumerated() { indexByID[item.id] = i }
+    }
+
+    // MARK: - Persistence (whole-list snapshot to `queue.json`)
+
+    /// Debounced save: coalesces a burst of durable changes into one write ~0.4s
+    /// after the last one. A no-op when persistence is disabled (tests / library).
+    private func scheduleSave() {
+        guard persistenceURL != nil else { return }
+        saveTask?.cancel()
+        saveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            self?.saveNow()
+        }
+    }
+
+    /// Write the current list now (skips transient `.probing` placeholders).
+    ///
+    /// `blocking: false` (the debounced path) offloads the atomic write to a
+    /// utility queue so it never stalls the UI. `blocking: true` writes inline on
+    /// the caller — required on quit, where the app returns `.terminateNow` right
+    /// after and the process would exit before a backgrounded write ever ran.
+    public func saveNow(blocking: Bool = false) {
+        guard let persistenceURL else { return }
+        let snapshot = items.compactMap { $0.state == .probing ? nil : QueueSnapshotItem(item: $0) }
+        guard let data = try? Self.snapshotEncoder().encode(snapshot) else { return }
+        let write = {
+            let dir = persistenceURL.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: persistenceURL, options: .atomic)
+        }
+        if blocking { write() } else { writeQueue.async(execute: write) }
+    }
+
+    private static func snapshotEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted]
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }
+
+    private static func loadSnapshot(from url: URL) -> [QueueSnapshotItem] {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? decoder.decode([QueueSnapshotItem].self, from: data)
+        else { return [] }
+        return decoded
     }
 }

@@ -24,6 +24,13 @@ struct RootView: View {
         .task {
             if app.setupPhase != .ready { await app.bootstrap() }
         }
+        // Offer to resume/delete downloads a previous session left unfinished.
+        .sheet(isPresented: Binding(
+            get: { !app.recovery.isEmpty },
+            set: { if !$0 { app.dismissRecovery() } }
+        )) {
+            RecoveryView()
+        }
         // macOS has no pasteboard-change event, so poll the clipboard on a timer:
         // a copied link is caught whether or not the app has focus (the old
         // "only on focus regain" check missed most copies). Plus an instant check

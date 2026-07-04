@@ -8,7 +8,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **The download list is now persistent.** Closing the app and reopening it
+  brings back the same rows: completed downloads stay listed, and anything that
+  was still running or queued reappears ready to resume (nothing auto-starts —
+  you decide). The whole list is snapshotted to `queue.json` on every change and
+  flushed on quit.
+- **Quit-time cleanup prompt.** If the list still holds finished (completed or
+  cancelled) downloads when you quit, the app asks whether to remove them first —
+  *Rimuovi ed esci* / *Mantieni ed esci* / *Annulla*. Unfinished downloads are
+  always kept so you can resume them next launch.
+
+### Changed
+- The launch recovery sheet now targets only **orphaned** partial files — `.part`
+  leftovers that belong to no row in the (now persistent) list — and offers to
+  delete them. Interrupted downloads that are still in the list reappear as
+  resumable rows instead of being duplicated in the sheet. This replaces the
+  separate `pending.json` bookkeeping with the single `queue.json` snapshot.
 
 ## [1.3.2] - 2026-07-03
 

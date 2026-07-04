@@ -10,6 +10,10 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
     public var duration: TimeInterval?
     /// yt-dlp extractor key (e.g. "Youtube", "Vimeo"); drives the source badge in the UI.
     public var source: String?
+    /// yt-dlp's own media id (from the probe). It appears in the output filename
+    /// (`%(title)s [%(id)s].%(ext)s`), so it links a resumed/interrupted download
+    /// to its leftover `.part`/`.ytdl` files on disk.
+    public var mediaID: String?
     public var availableFormats: [MediaFormat]
     public var selectedFormat: FormatChoice
     public var state: DownloadState
@@ -31,6 +35,7 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         thumbnailURL: URL? = nil,
         duration: TimeInterval? = nil,
         source: String? = nil,
+        mediaID: String? = nil,
         availableFormats: [MediaFormat] = [],
         selectedFormat: FormatChoice = .video(.best),
         state: DownloadState = .probing,
@@ -48,6 +53,7 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         self.thumbnailURL = thumbnailURL
         self.duration = duration
         self.source = source
+        self.mediaID = mediaID
         self.availableFormats = availableFormats
         self.selectedFormat = selectedFormat
         self.state = state
@@ -62,4 +68,20 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
 
     /// Convenience mirror of `state.allowsFormatEditing` used by the queue/UI.
     public var allowsFormatEditing: Bool { state.allowsFormatEditing }
+
+    /// True when a field the on-disk queue snapshot persists differs from `other`.
+    /// Excludes the live `progress`/`speed`/`eta`/`stage` (which change ~10-20/s
+    /// during a download) so those hot-path updates never trigger a queue re-save.
+    func durablyDiffers(from other: DownloadItem) -> Bool {
+        state != other.state
+            || selectedFormat != other.selectedFormat
+            || outputPath != other.outputPath
+            || errorMessage != other.errorMessage
+            || title != other.title
+            || url != other.url
+            || mediaID != other.mediaID
+            || source != other.source
+            || thumbnailURL != other.thumbnailURL
+            || duration != other.duration
+    }
 }
