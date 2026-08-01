@@ -22,8 +22,11 @@ public struct QueueSnapshotItem: Codable, Equatable, Sendable {
     public var outputPath: String?
     public var errorMessage: String?
     public var addedAt: Date
+    /// Optional, so a `queue.json` written before this field existed still decodes.
+    public var playlistIndex: Int?
 
     public init(item: DownloadItem) {
+        playlistIndex = item.playlistIndex
         id = item.id
         url = item.url
         title = item.title
@@ -55,6 +58,7 @@ public struct QueueSnapshotItem: Codable, Equatable, Sendable {
             state: state.restoredAcrossLaunch,
             outputPath: outputPath.map { URL(fileURLWithPath: $0) },
             errorMessage: errorMessage,
-            addedAt: addedAt)
+            addedAt: addedAt,
+            playlistIndex: playlistIndex)
     }
 }

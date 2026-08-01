@@ -27,6 +27,12 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
     /// "added" date; defaults to now at creation. Trailing (with a default) so
     /// every existing call site keeps compiling.
     public var addedAt: Date
+    /// 1-based position inside the probed playlist, set only when the entries
+    /// cannot be told apart by URL — X hands back every video of a multi-video
+    /// post under the *same* tweet URL, so without this each row would re-download
+    /// the whole post. nil for everything else (a YouTube playlist entry already
+    /// carries its own watch URL). Consumed as `--playlist-items`.
+    public var playlistIndex: Int?
 
     public init(
         id: UUID = UUID(),
@@ -45,8 +51,10 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         eta: String? = nil,
         outputPath: URL? = nil,
         errorMessage: String? = nil,
-        addedAt: Date = Date()
+        addedAt: Date = Date(),
+        playlistIndex: Int? = nil
     ) {
+        self.playlistIndex = playlistIndex
         self.id = id
         self.url = url
         self.title = title

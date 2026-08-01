@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sia al download vero e proprio.
 
 ### Fixed
+- **Post di X con piu video.** X restituisce ogni video sotto lo stesso URL del
+  post, quindi ogni riga della lista riscaricava l'intero post: un post con 4
+  video produceva 4 righe da 4 file ciascuna, tutte in scrittura sugli stessi
+  percorsi di output. Ora ogni riga si porta dietro la propria posizione e
+  scarica solo il proprio video.
 - `xcodebuild` non compilava più: una vecchia cartella `App/build/` di derived
   data finiva dentro le sorgenti raccolte da XcodeGen e faceva fallire la build
   con `duplicate output file`. Ora è esclusa in `App/project.yml`.

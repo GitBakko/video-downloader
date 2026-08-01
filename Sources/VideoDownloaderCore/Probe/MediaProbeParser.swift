@@ -9,14 +9,28 @@ public enum MediaProbeParser {
     public static func items(fromDumpJSON data: Data) throws -> [DownloadItem] {
         let info = try JSONDecoder().decode(YtDlpInfo.self, from: data)
         if info.type == "playlist", let entries = info.entries {
+            let indistinguishable = entriesShareOneURL(entries)
             // Skip `null` entries (unavailable/private videos) so one dead video
             // never fails the whole probe → one .ready item per surviving entry.
-            return entries.compactMap { $0 }.map { makeItem(from: $0) }
+            // The index counts from the ORIGINAL positions: yt-dlp's
+            // `--playlist-items` numbering includes the entries that failed.
+            return entries.enumerated().compactMap { offset, entry in
+                entry.map {
+                    makeItem(from: $0, playlistIndex: indistinguishable ? offset + 1 : nil)
+                }
+            }
         }
         return [makeItem(from: info)]
     }
 
-    private static func makeItem(from info: YtDlpInfo) -> DownloadItem {
+    /// True when every entry reports the same page URL, so the rows could not be
+    /// downloaded independently from their URL alone (a multi-video X post).
+    private static func entriesShareOneURL(_ entries: [YtDlpInfo?]) -> Bool {
+        let urls = entries.compactMap { $0 }.map { $0.webpageURL ?? $0.url ?? "" }
+        return urls.count > 1 && Set(urls).count == 1
+    }
+
+    private static func makeItem(from info: YtDlpInfo, playlistIndex: Int? = nil) -> DownloadItem {
         DownloadItem(
             id: UUID(),
             url: info.webpageURL ?? info.url ?? "",
@@ -33,7 +47,8 @@ public enum MediaProbeParser {
             speed: nil,
             eta: nil,
             outputPath: nil,
-            errorMessage: nil
+            errorMessage: nil,
+            playlistIndex: playlistIndex
         )
     }
 

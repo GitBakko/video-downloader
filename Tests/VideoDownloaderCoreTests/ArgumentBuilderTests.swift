@@ -211,6 +211,30 @@ final class ArgumentBuilderTests: XCTestCase {
         XCTAssertFalse(args.contains("--embed-metadata"))
     }
 
+    // MARK: - Playlist entry isolation
+
+    func test_playlistItems_emittedForNumberedEntry() {
+        var numbered = item()
+        numbered.playlistIndex = 3
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.best),
+            item: numbered,
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(Array(args.suffix(2)), ["--playlist-items", "3"])
+    }
+
+    func test_playlistItems_absentForOrdinaryItem() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.best),
+            item: item(),
+            settings: settings(),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertFalse(args.contains("--playlist-items"))
+    }
+
     // MARK: - Cookies
 
     func test_cookieFlag_emittedForSelectedBrowser() {

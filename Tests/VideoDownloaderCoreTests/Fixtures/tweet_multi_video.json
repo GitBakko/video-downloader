@@ -1,0 +1,28 @@
+{
+  "_type": "playlist",
+  "id": "1577719286659006464",
+  "title": "Multi-video tweet",
+  "entries": [
+    {
+      "id": "1577719236209922048",
+      "title": "Tweet clip 1",
+      "webpage_url": "https://x.com/someone/status/1577719286659006464",
+      "url": "https://video.twimg.com/ext_tw_video/1577719236209922048/pu/vid/720x1280/a.mp4",
+      "extractor_key": "Twitter",
+      "formats": [
+        {"format_id": "http-2176", "ext": "mp4", "height": 720, "vcodec": null, "acodec": null}
+      ]
+    },
+    null,
+    {
+      "id": "1577719236209872897",
+      "title": "Tweet clip 3",
+      "webpage_url": "https://x.com/someone/status/1577719286659006464",
+      "url": "https://video.twimg.com/ext_tw_video/1577719236209872897/pu/vid/720x1280/c.mp4",
+      "extractor_key": "Twitter",
+      "formats": [
+        {"format_id": "http-2176", "ext": "mp4", "height": 720, "vcodec": null, "acodec": null}
+      ]
+    }
+  ]
+}

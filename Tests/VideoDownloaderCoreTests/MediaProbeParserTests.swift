@@ -89,6 +89,32 @@ final class MediaProbeParserTests: XCTestCase {
         XCTAssertTrue(first.availableFormats.contains { $0.vcodec == "none" })
     }
 
+    /// A multi-video X post returns every entry under the same tweet URL, so the
+    /// rows are only tellable apart by their playlist position. Without it each
+    /// row re-downloads the whole post.
+    func testMultiVideoTweetNumbersItsEntries() throws {
+        let data = try fixtureData("tweet_multi_video.json")
+        let items = try MediaProbeParser.items(fromDumpJSON: data)
+
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(Set(items.map(\.url)).count, 1, "precondition: entries share one URL")
+        // The dead middle entry still consumes position 2 — yt-dlp's
+        // `--playlist-items` numbering counts entries it failed to extract.
+        XCTAssertEqual(items.map(\.playlistIndex), [1, 3])
+    }
+
+    func testDistinctEntryURLsAreNotNumbered() throws {
+        let items = try MediaProbeParser.items(fromDumpJSON: try fixtureData("playlist.json"))
+        // A YouTube playlist entry already carries its own watch URL; numbering it
+        // would pin the row to a position in a playlist its URL no longer names.
+        XCTAssertEqual(items.compactMap(\.playlistIndex), [])
+    }
+
+    func testSingleVideoIsNotNumbered() throws {
+        let items = try MediaProbeParser.items(fromDumpJSON: try fixtureData("single_video.json"))
+        XCTAssertNil(items.first?.playlistIndex)
+    }
+
     func testMalformedJSONThrows() {
         let garbage = Data("not json at all".utf8)
         XCTAssertThrowsError(try MediaProbeParser.items(fromDumpJSON: garbage))

@@ -75,6 +75,31 @@ final class QueueSnapshotItemTests: XCTestCase {
         XCTAssertEqual(restored.url, "https://x/1")
     }
 
+    /// Losing the index across a relaunch would silently bring the "one row
+    /// downloads the whole tweet" bug back for restored rows.
+    func test_snapshot_roundTripsPlaylistIndex() throws {
+        let item = DownloadItem(url: "https://x.com/u/status/1", playlistIndex: 3)
+        let decoded = try JSONDecoder().decode(
+            QueueSnapshotItem.self,
+            from: try JSONEncoder().encode(QueueSnapshotItem(item: item)))
+        XCTAssertEqual(decoded.toItem().playlistIndex, 3)
+    }
+
+    /// A `queue.json` written before the field existed must still load.
+    func test_snapshot_decodesLegacyJSONWithoutPlaylistIndex() throws {
+        // Build it from the real encoder, then drop the key, so this stays honest
+        // if the on-disk shape ever changes.
+        let current = QueueSnapshotItem(item: DownloadItem(url: "https://x/1", playlistIndex: 3))
+        var fields = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: try JSONEncoder().encode(current)) as? [String: Any])
+        XCTAssertNotNil(fields.removeValue(forKey: "playlistIndex"), "field name changed")
+
+        let legacy = try JSONSerialization.data(withJSONObject: fields)
+        let decoded = try JSONDecoder().decode(QueueSnapshotItem.self, from: legacy)
+        XCTAssertNil(decoded.playlistIndex)
+        XCTAssertEqual(decoded.url, "https://x/1")
+    }
+
     func test_snapshot_keepsTerminalStatesAndOutputPath() {
         let out = URL(fileURLWithPath: "/tmp/One [abc].mp4")
         let item = DownloadItem(url: "https://x/1", mediaID: "abc",

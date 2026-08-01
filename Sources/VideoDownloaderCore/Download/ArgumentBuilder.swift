@@ -48,6 +48,15 @@ enum ArgumentBuilder {
 
         args += cookieArguments(settings.cookiesBrowser)
 
+        // Rows carved out of a playlist whose entries all share one URL (a
+        // multi-video X post) must name their entry, or each row fetches the
+        // whole post. `--playlist-items` indexes the same entry list the rows
+        // were built from — unlike the URL form `/video/N`, which indexes X's
+        // media list and so slips whenever a post also carries photos.
+        if let index = item.playlistIndex {
+            args += ["--playlist-items", String(index)]
+        }
+
         return args
     }
 
