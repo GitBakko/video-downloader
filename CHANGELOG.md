@@ -8,7 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- `xcodebuild` non compilava più: una vecchia cartella `App/build/` di derived
+  data finiva dentro le sorgenti raccolte da XcodeGen e faceva fallire la build
+  con `duplicate output file`. Ora è esclusa in `App/project.yml`.
 
 ## [1.4.0] - 2026-07-04
 

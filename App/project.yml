@@ -24,6 +24,9 @@ targets:
           - "*.entitlements"
           - "*.xcodeproj"
           - ".DS_Store"
+          # Stray derived data here would otherwise be swept in as resources
+          # and fail the build with "duplicate output file".
+          - "build"
       # Bundle the changelog so the in-app "Novità" window always shows the
       # current release history (parsed by ChangelogParser).
       - path: ../CHANGELOG.md
