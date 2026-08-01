@@ -46,7 +46,18 @@ enum ArgumentBuilder {
             args += ["--embed-thumbnail", "--embed-metadata"]
         }
 
+        args += cookieArguments(settings.cookiesBrowser)
+
         return args
+    }
+
+    /// Sites that hide media from logged-out visitors (age-gated X/Twitter posts,
+    /// restricted YouTube videos, most of Instagram) only ever return "no video
+    /// found" unless yt-dlp presents a logged-in session's cookies. Shared by the
+    /// probe and the download so a link that probes can also be fetched.
+    static func cookieArguments(_ browser: String?) -> [String] {
+        guard let browser, !browser.isEmpty else { return [] }
+        return ["--cookies-from-browser", browser]
     }
 
     private static func videoSelector(for quality: VideoQuality) -> String {

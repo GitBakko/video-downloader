@@ -50,4 +50,9 @@ name stays `VideoDownloader` and the bundle id `com.bakko.VideoDownloader`.
 
 ## Out of scope (v1)
 
-Subtitles, login/cookies for private content, editing/trim, distribution/notarization, queue persistence across launches, Windows/Linux.
+Subtitles, editing/trim, distribution/notarization, Windows/Linux.
+
+Login-gated content is handled by an opt-in `--cookies-from-browser` setting
+(`CookieBrowser`), passed to **both** the probe and the download — sites that
+gate media (sensitive X posts, age-restricted YouTube, Instagram) fail at
+extraction, not at download time, so the probe needs it too.

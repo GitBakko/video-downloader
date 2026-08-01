@@ -48,6 +48,19 @@ struct SettingsView: View {
                 Toggle("Incorpora copertina e metadati", isOn: $settings.embedThumbnailAndMetadata)
             }
 
+            Section("Contenuti che richiedono il login") {
+                Picker("Usa i cookie di", selection: $settings.cookiesBrowser) {
+                    Text("Nessuno").tag(String?.none)
+                    ForEach(CookieBrowser.allCases, id: \.rawValue) { browser in
+                        Text(browser.displayName).tag(String?.some(browser.rawValue))
+                    }
+                }
+                Text("I post con contenuti sensibili (X, YouTube con limiti di età, Instagram) non mostrano il video a chi non ha effettuato l’accesso: yt-dlp risponde “No video could be found”. Scegliendo un browser in cui hai già fatto login, l’app riusa i suoi cookie. macOS chiederà una conferma (Portachiavi per i browser Chromium, Accesso completo al disco per Safari).")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Componenti") {
                 LabeledContent("yt-dlp") {
                     HStack(spacing: 8) {

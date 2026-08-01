@@ -28,6 +28,26 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.downloadSettings.embedThumbnailAndMetadata)
     }
 
+    func test_cookiesBrowser_defaultsToOff_andReachesDownloadSettings() {
+        let store = SettingsStore(defaults: ephemeralDefaults())
+        XCTAssertNil(store.cookiesBrowser)
+        XCTAssertNil(store.downloadSettings.cookiesBrowser)
+
+        store.cookiesBrowser = CookieBrowser.safari.rawValue
+        XCTAssertEqual(store.downloadSettings.cookiesBrowser, "safari")
+    }
+
+    /// A stale or hand-edited default must not survive: yt-dlp rejects an unknown
+    /// browser keyword outright, which would break every call, not just X.
+    func test_cookiesBrowser_dropsUnsupportedPersistedValue() {
+        let defaults = ephemeralDefaults()
+        defaults.set("netscape", forKey: "settings.cookiesBrowser")
+        XCTAssertNil(SettingsStore(defaults: defaults).cookiesBrowser)
+
+        defaults.set("chrome", forKey: "settings.cookiesBrowser")
+        XCTAssertEqual(SettingsStore(defaults: defaults).cookiesBrowser, "chrome")
+    }
+
     func test_persistsAcrossInstances() {
         let defaults = ephemeralDefaults()
         let first = SettingsStore(defaults: defaults)

@@ -34,6 +34,12 @@ public final class SettingsStore {
     public var maxConcurrentPerSource: Int {
         didSet { defaults.set(maxConcurrentPerSource, forKey: Keys.maxPerSource) }
     }
+    /// Browser whose cookies yt-dlp may reuse, or nil for anonymous requests.
+    /// Off by default: reading a browser's cookie jar costs a macOS Keychain (or
+    /// Full Disk Access) prompt, so it stays opt-in. See `CookieBrowser`.
+    public var cookiesBrowser: String? {
+        didSet { defaults.set(cookiesBrowser, forKey: Keys.cookiesBrowser) }
+    }
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -47,12 +53,14 @@ public final class SettingsStore {
         autoStartDownloads = defaults.object(forKey: Keys.autoStart) as? Bool ?? false
         maxConcurrentDownloads = max(1, defaults.object(forKey: Keys.maxConcurrent) as? Int ?? 2)
         maxConcurrentPerSource = max(1, defaults.object(forKey: Keys.maxPerSource) as? Int ?? 2)
+        cookiesBrowser = CookieBrowser.normalize(defaults.string(forKey: Keys.cookiesBrowser))
     }
 
     /// The value consumed by Phase 6's `QueueStore` / `ArgumentBuilder` (Task 1b.3 type).
     public var downloadSettings: DownloadSettings {
         DownloadSettings(destination: destination,
-                         embedThumbnailAndMetadata: embedThumbnailAndMetadata)
+                         embedThumbnailAndMetadata: embedThumbnailAndMetadata,
+                         cookiesBrowser: cookiesBrowser)
     }
 
     /// `~/Movies/VideoDownloader` (spec §3.5 default).
@@ -68,6 +76,7 @@ public final class SettingsStore {
         static let autoStart = "settings.autoStartDownloads"
         static let maxConcurrent = "settings.maxConcurrentDownloads"
         static let maxPerSource = "settings.maxConcurrentPerSource"
+        static let cookiesBrowser = "settings.cookiesBrowser"
     }
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)

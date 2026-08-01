@@ -77,12 +77,15 @@ public struct MediaProbe: MediaProbing {
         self.runner = runner
     }
 
-    public func probe(url: String) async throws -> [DownloadItem] {
+    public func probe(url: String, cookiesBrowser: String?) async throws -> [DownloadItem] {
         let result = try await runner.run(
             executable: binaries.ytDlpURL,
             // A JS runtime (if available) makes YouTube extraction use the proper
             // web client — faster/more reliable than the deprecated fallback.
-            arguments: ["-J", "--no-warnings"] + JSRuntimeResolver.arguments + [url]
+            arguments: ["-J", "--no-warnings"]
+                + JSRuntimeResolver.arguments
+                + ArgumentBuilder.cookieArguments(cookiesBrowser)
+                + [url]
         )
         guard result.exitCode == 0 else {
             let stderr = String(data: result.stderr, encoding: .utf8) ?? ""
@@ -99,6 +102,6 @@ public struct MediaProbe: MediaProbing {
             .split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        return lines.last ?? "yt-dlp non ha prodotto output."
+        return YtDlpMessage.explain(lines.last ?? "yt-dlp non ha prodotto output.")
     }
 }

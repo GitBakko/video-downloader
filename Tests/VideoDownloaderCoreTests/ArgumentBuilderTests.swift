@@ -15,8 +15,10 @@ final class ArgumentBuilderTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func settings(embed: Bool = false) -> DownloadSettings {
-        DownloadSettings(destination: destination, embedThumbnailAndMetadata: embed)
+    private func settings(embed: Bool = false, cookiesBrowser: String? = nil) -> DownloadSettings {
+        DownloadSettings(destination: destination,
+                         embedThumbnailAndMetadata: embed,
+                         cookiesBrowser: cookiesBrowser)
     }
 
     private func item(formats: [MediaFormat] = []) -> DownloadItem {
@@ -207,5 +209,31 @@ final class ArgumentBuilderTests: XCTestCase {
         )
         XCTAssertFalse(args.contains("--embed-thumbnail"))
         XCTAssertFalse(args.contains("--embed-metadata"))
+    }
+
+    // MARK: - Cookies
+
+    func test_cookieFlag_emittedForSelectedBrowser() {
+        let args = ArgumentBuilder.downloadArguments(
+            for: .video(.best),
+            item: item(),
+            settings: settings(cookiesBrowser: "chrome"),
+            ffmpegDirectory: ffmpegDir
+        )
+        XCTAssertEqual(Array(args.suffix(2)), ["--cookies-from-browser", "chrome"])
+    }
+
+    func test_cookieFlag_absentWhenUnsetOrEmpty() {
+        for browser in [nil, ""] as [String?] {
+            let args = ArgumentBuilder.downloadArguments(
+                for: .video(.best),
+                item: item(),
+                settings: settings(cookiesBrowser: browser),
+                ffmpegDirectory: ffmpegDir
+            )
+            // An empty string would otherwise become a bare `--cookies-from-browser`
+            // with the URL as its value, breaking every download.
+            XCTAssertFalse(args.contains("--cookies-from-browser"), "browser=\(browser ?? "nil")")
+        }
     }
 }

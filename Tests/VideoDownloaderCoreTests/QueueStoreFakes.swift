@@ -6,12 +6,14 @@ final class FakeProber: MediaProbing, @unchecked Sendable {
     var itemsToReturn: [DownloadItem] = []
     var errorToThrow: Error?
     private(set) var probedURLs: [String] = []
+    private(set) var probedCookieBrowsers: [String?] = []
     /// Optional gate: when set, `probe` suspends until the test releases it,
     /// letting the test observe the intermediate `.probing` placeholder.
     var gate: ProbeGate?
 
-    func probe(url: String) async throws -> [DownloadItem] {
+    func probe(url: String, cookiesBrowser: String?) async throws -> [DownloadItem] {
         probedURLs.append(url)
+        probedCookieBrowsers.append(cookiesBrowser)
         if let gate { await gate.wait() }
         if let error = errorToThrow { throw error }
         return itemsToReturn

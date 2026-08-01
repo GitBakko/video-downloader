@@ -36,7 +36,7 @@ final class MediaProbeTests: XCTestCase {
         let spy = SpyRunner(result: ProbeResult(stdout: Data("{}".utf8), stderr: Data(), exitCode: 0))
         let probe = MediaProbe(binaries: bins, runner: spy)
 
-        _ = try? await probe.probe(url: "https://example.com/watch?v=x")
+        _ = try? await probe.probe(url: "https://example.com/watch?v=x", cookiesBrowser: nil)
 
         XCTAssertEqual(spy.receivedExecutable, exe)
         // Core args are fixed at the ends; optional `--js-runtimes <name>:<path>`
@@ -44,6 +44,34 @@ final class MediaProbeTests: XCTestCase {
         let args = spy.receivedArguments ?? []
         XCTAssertEqual(Array(args.prefix(2)), ["-J", "--no-warnings"])
         XCTAssertEqual(args.last, "https://example.com/watch?v=x")
+    }
+
+    func test_probe_forwards_cookiesBrowser_to_ytDlp() async {
+        let bins = StubBinaries(ytDlpURL: URL(fileURLWithPath: "/tmp/bin/yt-dlp"),
+                                ffmpegDirectory: URL(fileURLWithPath: "/tmp/bin"),
+                                ytDlpVersion: nil)
+        let spy = SpyRunner(result: ProbeResult(stdout: Data("{}".utf8), stderr: Data(), exitCode: 0))
+        let probe = MediaProbe(binaries: bins, runner: spy)
+
+        _ = try? await probe.probe(url: "https://x.com/u/status/1", cookiesBrowser: "safari")
+
+        let args = spy.receivedArguments ?? []
+        guard let flag = args.firstIndex(of: "--cookies-from-browser") else {
+            return XCTFail("probe dropped the cookie flag: \(args)")
+        }
+        XCTAssertEqual(args[flag + 1], "safari")
+    }
+
+    func test_probe_omits_cookieFlag_when_no_browser_selected() async {
+        let bins = StubBinaries(ytDlpURL: URL(fileURLWithPath: "/tmp/bin/yt-dlp"),
+                                ffmpegDirectory: URL(fileURLWithPath: "/tmp/bin"),
+                                ytDlpVersion: nil)
+        let spy = SpyRunner(result: ProbeResult(stdout: Data("{}".utf8), stderr: Data(), exitCode: 0))
+        let probe = MediaProbe(binaries: bins, runner: spy)
+
+        _ = try? await probe.probe(url: "https://example.com/v", cookiesBrowser: nil)
+
+        XCTAssertFalse((spy.receivedArguments ?? []).contains("--cookies-from-browser"))
     }
 
     func test_probe_throws_lastSignificantStderrLine_on_nonzero_exit() async {
@@ -55,7 +83,7 @@ final class MediaProbeTests: XCTestCase {
         let probe = MediaProbe(binaries: bins, runner: spy)
 
         do {
-            _ = try await probe.probe(url: "https://example.com/private")
+            _ = try await probe.probe(url: "https://example.com/private", cookiesBrowser: nil)
             XCTFail("expected probe to throw on non-zero exit")
         } catch {
             XCTAssertEqual((error as? MediaProbeError)?.errorDescription, "ERROR: Video unavailable")

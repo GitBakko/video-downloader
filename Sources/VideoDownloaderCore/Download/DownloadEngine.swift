@@ -196,9 +196,9 @@ public final class DownloadEngine: Downloading, @unchecked Sendable {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         if let err = lines.last(where: { $0.hasPrefix("ERROR:") }) {
-            return err
+            return YtDlpMessage.explain(err)
         }
-        return lines.last ?? ""
+        return YtDlpMessage.explain(lines.last ?? "")
     }
 
     /// Extracts the destination file URL from a yt-dlp stdout line, if present.

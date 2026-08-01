@@ -87,7 +87,7 @@ public final class QueueStore {
 
     private func performProbe(url: String, placeholderID: UUID) async {
         do {
-            var probed = try await prober.probe(url: url)
+            var probed = try await prober.probe(url: url, cookiesBrowser: settings.cookiesBrowser)
             // If we were cancelled mid-probe, `cancel(_:)` already moved the item
             // to `.cancelled`; discard the result rather than overwrite it.
             if Task.isCancelled { return }
