@@ -8,18 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.5.0] - 2026-08-01
+
 ### Added
 - **Download di contenuti che richiedono il login.** Nuova sezione in
-  Impostazioni per riusare i cookie di un browser in cui hai gia effettuato
+  Impostazioni per riusare i cookie di un browser in cui hai già effettuato
   l'accesso (Safari, Chrome, Firefox, Edge, Brave). I post di X con contenuti
   sensibili restituivano `No video could be found in this tweet`: a chi non ha
   effettuato l'accesso X consegna il post senza il media, quindi yt-dlp non
-  trovava alcun formato. Vale anche per YouTube con limiti di eta e Instagram.
+  trovava alcun formato. Vale anche per YouTube con limiti di età e Instagram.
   Disattivato di default. Il flag viene passato sia alla ricognizione del link
   sia al download vero e proprio.
 
 ### Fixed
-- **Post di X con piu video.** X restituisce ogni video sotto lo stesso URL del
+- **Post di X con più video.** X restituisce ogni video sotto lo stesso URL del
   post, quindi ogni riga della lista riscaricava l'intero post: un post con 4
   video produceva 4 righe da 4 file ciascuna, tutte in scrittura sugli stessi
   percorsi di output. Ora ogni riga si porta dietro la propria posizione e
