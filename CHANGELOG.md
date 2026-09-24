@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.6.0] - 2026-09-24
+
 ### Added
 - **Nomi dei file leggibili, con l'attrice in testa.** A download finito il file
   viene rinominato in `<Attrice>_<titolo pulito>.<ext>`. Il nome viene cercato
