@@ -52,6 +52,12 @@ public final class SettingsStore {
         didSet { defaults.set(performerExclusions, forKey: Keys.performerExclusions) }
     }
 
+    /// When on, a finished/renamed file whose performer is a library folder is
+    /// moved into that folder ("vario" files always stay in the destination).
+    public var movesToPerformerFolder: Bool {
+        didSet { defaults.set(movesToPerformerFolder, forKey: Keys.movesToPerformerFolder) }
+    }
+
     /// Performer names currently available for naming (empty when unmounted).
     public var performerNames: [String] {
         FileNamer.libraryNames(at: performerLibrary.path, excluding: performerExclusions)
@@ -74,6 +80,7 @@ public final class SettingsStore {
                                ?? FileNamer.defaultLibraryPath, isDirectory: true)
         performerExclusions = defaults.stringArray(forKey: Keys.performerExclusions)
             ?? FileNamer.defaultExclusions
+        movesToPerformerFolder = defaults.object(forKey: Keys.movesToPerformerFolder) as? Bool ?? false
     }
 
     /// The value consumed by Phase 6's `QueueStore` / `ArgumentBuilder` (Task 1b.3 type).
@@ -99,6 +106,7 @@ public final class SettingsStore {
         static let cookiesBrowser = "settings.cookiesBrowser"
         static let performerLibrary = "settings.performerLibrary"
         static let performerExclusions = "settings.performerExclusions"
+        static let movesToPerformerFolder = "settings.movesToPerformerFolder"
     }
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)

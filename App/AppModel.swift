@@ -349,7 +349,7 @@ final class AppModel {
     func renameExistingFiles() {
         guard renameProgress == nil, !hasActiveDownloads else { return }
         let candidates = renameCandidates()
-        guard !candidates.isEmpty else { showToast("Nessun file da rinominare"); return }
+        guard !candidates.isEmpty || settings.movesToPerformerFolder else { showToast("Nessun file da rinominare"); return }
         renameProgress = (0, candidates.count)
         // Most recent record wins if the same path was downloaded twice.
         var urlByPath: [String: String] = [:]
@@ -362,12 +362,19 @@ final class AppModel {
                 cookiesBrowser: settings.cookiesBrowser,
                 urlFor: { urlByPath[$0.path] },
                 onProgress: { [weak self] done, total in self?.renameProgress = (done, total) })
-            for rename in renames {
+            // Also sweeps files named `<Performer>_…` by earlier downloads/renames.
+            let moves = settings.movesToPerformerFolder
+                ? await ExistingFileRenamer.moveToPerformerFolders(
+                    in: settings.destination, library: settings.performerNames,
+                    libraryRoot: settings.performerLibrary)
+                : []
+            for rename in renames + moves {
                 history.relocateOutput(from: rename.from, to: rename.to)
                 queue.relocateOutput(from: rename.from, to: rename.to)
             }
             renameProgress = nil
-            showToast("Rinominati \(renames.count) file su \(candidates.count)")
+            showToast("Rinominati \(renames.count) file su \(candidates.count)"
+                      + (moves.isEmpty ? "" : ", spostati \(moves.count) nelle cartelle"))
         }
     }
 

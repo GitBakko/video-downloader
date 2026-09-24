@@ -63,6 +63,11 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Toggle("Sposta nella cartella dell’attrice", isOn: $settings.movesToPerformerFolder)
+                Text("A download finito o dopo “Rinomina…”, i file il cui nome è una sottocartella della cartella attrici vengono spostati lì (con il disco montato). I “vario” restano nella destinazione.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 LabeledContent("File già scaricati") {
                     HStack(spacing: 8) {
                         if let progress = app.renameProgress {
@@ -122,7 +127,9 @@ struct SettingsView: View {
             Button("Rinomina") { app.renameExistingFiles() }
             Button("Annulla", role: .cancel) {}
         } message: {
-            Text("I file vengono rinominati sul disco. Quelli già rinominati non vengono toccati.")
+            Text(app.settings.movesToPerformerFolder
+                 ? "I file vengono rinominati sul disco, poi quelli con un’attrice della cartella attrici vengono spostati nella sua sottocartella."
+                 : "I file vengono rinominati sul disco. Quelli già rinominati non vengono toccati.")
         }
     }
 
@@ -130,6 +137,7 @@ struct SettingsView: View {
 
     private var renameTitle: String {
         let count = app.renameCandidates().count
+        if app.settings.movesToPerformerFolder && count == 0 { return "Spostare i file nelle cartelle delle attrici?" }
         return count == 0 ? "Nessun file da rinominare" : "Rinominare \(count) file in “\(app.settings.destination.lastPathComponent)”?"
     }
 

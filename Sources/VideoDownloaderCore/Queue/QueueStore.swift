@@ -206,7 +206,7 @@ public final class QueueStore {
         let task = Task { @MainActor in
             do {
                 for try await event in stream {
-                    self.handle(event, for: id)
+                    await self.handle(event, for: id)
                 }
             } catch is CancellationError {
                 self.updateItem(id) { $0.state = .cancelled }
@@ -222,7 +222,7 @@ public final class QueueStore {
         runningTasks[id] = task
     }
 
-    private func handle(_ event: DownloadEvent, for id: UUID) {
+    private func handle(_ event: DownloadEvent, for id: UUID) async {
         switch event {
         case let .progress(percent, speed, eta, stage):
             updateItem(id) {
@@ -241,7 +241,8 @@ public final class QueueStore {
                 $0.stage = nil      // UI shows generic "Elaborazione…" from state
             }
         case let .finished(outputPath):
-            let outputPath = outputPath.map { renamedOutput($0, for: id) }
+            var outputPath = outputPath
+            if let url = outputPath { outputPath = await finalOutput(url, for: id) }
             updateItem(id) {
                 $0.state = .completed
                 $0.progress = 1.0
@@ -257,12 +258,21 @@ public final class QueueStore {
         }
     }
 
+    /// Renamed file, then moved into its performer folder when that setting is on.
+    /// The row stays "processing" during the move (a cross-disk copy takes a while).
+    private func finalOutput(_ url: URL, for id: UUID) async -> URL {
+        let library = libraryNamesOverride?() ?? settings.performerNames
+        let renamed = renamedOutput(url, for: id, library: library)
+        guard settings.movesToPerformerFolder else { return renamed }
+        return await FileNamer.moveIntoPerformerFolder(renamed, library: library,
+                                                       libraryRoot: settings.performerLibrary) ?? renamed
+    }
+
     /// Renames the finished file to `<Performer>_<clean title>.<ext>`. Any failure
     /// (file missing, name clash race, permissions) keeps yt-dlp's original name:
     /// a download must never be lost to a cosmetic rename.
-    private func renamedOutput(_ url: URL, for id: UUID) -> URL {
+    private func renamedOutput(_ url: URL, for id: UUID, library: [String]) -> URL {
         guard let item = item(id), FileManager.default.fileExists(atPath: url.path) else { return url }
-        let library = libraryNamesOverride?() ?? settings.performerNames
         let name = FileNamer.fileName(for: item, ext: url.pathExtension, library: library)
         guard name != url.lastPathComponent else { return url }
         let target = FileNamer.uniqueURL(in: url.deletingLastPathComponent(), name: name)

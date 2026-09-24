@@ -160,6 +160,35 @@ final class QueueStoreTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: raw.path))
     }
 
+    func test_finishedFile_movesIntoPerformerFolder_butVarioStays() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let dest = root.appendingPathComponent("dest"), library = root.appendingPathComponent("lib")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: library.appendingPathComponent("Lisa Ann"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let rawA = dest.appendingPathComponent("a [1].mp4"), rawB = dest.appendingPathComponent("b [2].mp4")
+        for raw in [rawA, rawB] { FileManager.default.createFile(atPath: raw.path, contents: Data("x".utf8)) }
+
+        let settings = makeEphemeralSettings()
+        settings.performerLibrary = library
+        settings.movesToPerformerFolder = true
+        let prober = FakeProber(), engine = FakeEngine()
+        let sut = QueueStore(prober: prober, engine: engine, binaries: FakeBinaries(), settings: settings,
+                             libraryNames: { ["Lisa Ann"] })
+        prober.itemsToReturn = [DownloadItem(url: "https://x.com/a/status/1", title: "lisa ann pool", state: .ready),
+                                DownloadItem(url: "https://x.com/a/status/2", title: "nobody here", state: .ready)]
+        await sut.add(url: "https://x.com/a/status/1")
+        sut.startAll()
+        engine.finish(sut.items[0].id, outputPath: rawA)
+        engine.finish(sut.items[1].id, outputPath: rawB)
+
+        await waitUntil { sut.items.allSatisfy { $0.state == .completed } }
+        let moved = library.appendingPathComponent("Lisa Ann/Lisa Ann_pool.mp4")
+        XCTAssertEqual(sut.items[0].outputPath, moved)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: moved.path))
+        XCTAssertEqual(sut.items[1].outputPath, dest.appendingPathComponent("vario_nobody here.mp4"))
+    }
+
     func test_pause_preventsPromotionOnStartAll() async {
         let (sut, prober, engine) = makeSUT()
         prober.itemsToReturn = makeReadyItems(3)

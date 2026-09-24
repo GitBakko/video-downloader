@@ -93,6 +93,26 @@ public enum ExistingFileRenamer {
         return renames
     }
 
+    /// Moves every finished `<Performer>_…` file of `directory` whose performer is
+    /// a library folder into that folder; "vario" and unknown names stay put.
+    @MainActor
+    public static func moveToPerformerFolders(in directory: URL, library: [String],
+                                              libraryRoot: URL) async -> [Rename] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        var moves: [Rename] = []
+        for name in names.sorted() where !name.hasPrefix(".") && !name.hasSuffix(".part")
+            && !name.hasSuffix(".ytdl") && name.range(of: #"\.(f\d+|temp)\.[^.]+$"#, options: .regularExpression) == nil {
+            if Task.isCancelled { break }
+            let file = directory.appendingPathComponent(name)
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: file.path, isDirectory: &isDir), !isDir.boolValue,
+                  let target = await FileNamer.moveIntoPerformerFolder(file, library: library, libraryRoot: libraryRoot)
+            else { continue }
+            moves.append(Rename(from: file, to: target))
+        }
+        return moves
+    }
+
     /// The probed entry matching the file's media id (a multi-video post yields
     /// several), else a bare item carrying the filename's title.
     static func metadata(for candidate: Candidate, url: String?,

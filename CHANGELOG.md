@@ -8,7 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Spostamento nella cartella dell'attrice** (opzione in Impostazioni › Nomi dei
+  file, spenta di default). A download finito, e dopo "Rinomina…", i file il cui
+  prefisso è una sottocartella della cartella attrici vengono spostati lì, senza
+  sovrascrivere nulla. I `vario_` e i nomi senza cartella restano nella
+  destinazione; lo spostamento tra dischi non blocca l'interfaccia.
 
 ## [1.6.0] - 2026-09-24
 

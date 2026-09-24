@@ -78,4 +78,25 @@ final class ExistingFileRenamerTests: XCTestCase {
             prober: prober, cookiesBrowser: nil, urlFor: { _ in "https://x.com/deleted" })
         XCTAssertEqual(renames.map(\.to.lastPathComponent), ["Lisa Ann_by the pool.mp4"])
     }
+
+    @MainActor
+    func test_moveToPerformerFolders_movesOnlyLibraryPerformers() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let dest = root.appendingPathComponent("dest"), library = root.appendingPathComponent("lib")
+        try FileManager.default.createDirectory(at: dest, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: library.appendingPathComponent("Lisa Ann"), withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for name in ["Lisa Ann_a.mp4", "Lisa Ann_b.mp4.part", "vario_c.mp4", "Other_d.mp4"] {
+            FileManager.default.createFile(atPath: dest.appendingPathComponent(name).path, contents: Data())
+        }
+        // Same name already in the folder: gets a suffix, nothing overwritten.
+        FileManager.default.createFile(atPath: library.appendingPathComponent("Lisa Ann/Lisa Ann_a.mp4").path, contents: Data())
+
+        let moves = await ExistingFileRenamer.moveToPerformerFolders(in: dest, library: ["Lisa Ann"], libraryRoot: library)
+
+        XCTAssertEqual(moves, [.init(from: dest.appendingPathComponent("Lisa Ann_a.mp4"),
+                                     to: library.appendingPathComponent("Lisa Ann/Lisa Ann_a_2.mp4"))])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: dest.path).sorted(),
+                       ["Lisa Ann_b.mp4.part", "Other_d.mp4", "vario_c.mp4"])
+    }
 }

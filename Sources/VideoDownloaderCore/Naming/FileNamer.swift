@@ -179,6 +179,26 @@ public enum FileNamer {
         return first   // unreachable
     }
 
+    /// The library folder a `<Performer>_…` file belongs in: its prefix when that is
+    /// a library folder name (cast / NLTagger names have no folder), never "vario".
+    public static func performerFolder(forFileName name: String, library: [String]) -> String? {
+        library
+            .filter { $0.lowercased() != fallbackPerformer && name.hasPrefix($0 + "_") }
+            .max { $0.count < $1.count }   // "Ava Addams" over "Ava"
+    }
+
+    /// Moves `file` into `<libraryRoot>/<Performer>/` (unique name, never
+    /// overwrites) and returns the new URL; nil when it has no performer folder
+    /// or the move fails. Runs off the main actor: across disks it copies the video.
+    public static func moveIntoPerformerFolder(_ file: URL, library: [String], libraryRoot: URL) async -> URL? {
+        guard let folder = performerFolder(forFileName: file.lastPathComponent, library: library) else { return nil }
+        return await Task.detached {
+            let target = uniqueURL(in: libraryRoot.appendingPathComponent(folder, isDirectory: true),
+                                   name: file.lastPathComponent)
+            return (try? FileManager.default.moveItem(at: file, to: target)) != nil ? target : nil
+        }.value
+    }
+
     // MARK: - Text helpers
 
     static func ascii(_ s: String) -> String {

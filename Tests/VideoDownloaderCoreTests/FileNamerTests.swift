@@ -137,6 +137,14 @@ final class FileNamerTests: XCTestCase {
         XCTAssertEqual(FileNamer.libraryNames(at: dir.path, excluding: ["telegram", " Compilations "]), ["Lisa Ann"])
     }
 
+    func test_performerFolder_onlyLibraryNames_neverVario() {
+        let library = ["Ava", "Ava Addams", "vario"]
+        XCTAssertEqual(FileNamer.performerFolder(forFileName: "Ava Addams_clip.mp4", library: library), "Ava Addams")
+        XCTAssertEqual(FileNamer.performerFolder(forFileName: "Ava_clip.mp4", library: library), "Ava")
+        XCTAssertNil(FileNamer.performerFolder(forFileName: "vario_clip.mp4", library: library))
+        XCTAssertNil(FileNamer.performerFolder(forFileName: "Mia Malkova_clip.mp4", library: library))
+    }
+
     func test_libraryNames_listsOnlyFolders() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("Lisa Ann"), withIntermediateDirectories: true)
