@@ -17,6 +17,9 @@ public final class QueueStore {
     private let engine: Downloading
     private let binaries: BinaryProviding
     private let settings: SettingsStore
+    /// Test override for the performer names; nil reads `settings.performerNames`
+    /// at each completion, so a disk mounted later is picked up.
+    @ObservationIgnored private let libraryNamesOverride: (() -> [String])?
 
     /// Where the whole list is snapshotted so it survives a quit (`queue.json`).
     /// Optional so tests and the pure library can construct an in-memory queue
@@ -39,7 +42,9 @@ public final class QueueStore {
 
     public init(prober: MediaProbing, engine: Downloading,
                 binaries: BinaryProviding, settings: SettingsStore,
-                persistenceURL: URL? = nil) {
+                persistenceURL: URL? = nil,
+                libraryNames: (() -> [String])? = nil) {
+        self.libraryNamesOverride = libraryNames
         self.prober = prober
         self.engine = engine
         self.binaries = binaries
@@ -236,6 +241,7 @@ public final class QueueStore {
                 $0.stage = nil      // UI shows generic "Elaborazione…" from state
             }
         case let .finished(outputPath):
+            let outputPath = outputPath.map { renamedOutput($0, for: id) }
             updateItem(id) {
                 $0.state = .completed
                 $0.progress = 1.0
@@ -248,6 +254,31 @@ public final class QueueStore {
             if let finished = item(id) {
                 onItemFinished?(finished)
             }
+        }
+    }
+
+    /// Renames the finished file to `<Performer>_<clean title>.<ext>`. Any failure
+    /// (file missing, name clash race, permissions) keeps yt-dlp's original name:
+    /// a download must never be lost to a cosmetic rename.
+    private func renamedOutput(_ url: URL, for id: UUID) -> URL {
+        guard let item = item(id), FileManager.default.fileExists(atPath: url.path) else { return url }
+        let library = libraryNamesOverride?() ?? settings.performerNames
+        let name = FileNamer.fileName(for: item, ext: url.pathExtension, library: library)
+        guard name != url.lastPathComponent else { return url }
+        let target = FileNamer.uniqueURL(in: url.deletingLastPathComponent(), name: name)
+        do {
+            try FileManager.default.moveItem(at: url, to: target)
+            return target
+        } catch {
+            return url
+        }
+    }
+
+    /// Points completed rows at a file renamed after the fact (see `ExistingFileRenamer`),
+    /// so "Mostra nel Finder" keeps working.
+    public func relocateOutput(from old: URL, to new: URL) {
+        for item in items where item.outputPath == old {
+            updateItem(item.id) { $0.outputPath = new }
         }
     }
 

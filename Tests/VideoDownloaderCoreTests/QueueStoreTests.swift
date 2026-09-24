@@ -13,7 +13,8 @@ final class QueueStoreTests: XCTestCase {
         let prober = FakeProber()
         let engine = FakeEngine()
         let sut = QueueStore(prober: prober, engine: engine,
-                             binaries: FakeBinaries(), settings: makeEphemeralSettings())
+                             binaries: FakeBinaries(), settings: makeEphemeralSettings(),
+                             libraryNames: { [] })
         return (sut, prober, engine)
     }
 
@@ -130,6 +131,33 @@ final class QueueStoreTests: XCTestCase {
                        URL(fileURLWithPath: "/tmp/out.mp4"))
         XCTAssertEqual(sut.items.first(where: { $0.id == third })?.state, .downloading)
         XCTAssertEqual(sut.items.filter { $0.state == .downloading }.count, 2)
+    }
+
+    func test_finishedFile_isRenamedWithPerformerPrefix() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let raw = dir.appendingPathComponent("Aggregator - clip [1834567890123].mp4")
+        FileManager.default.createFile(atPath: raw.path, contents: Data("x".utf8))
+
+        let prober = FakeProber()
+        let engine = FakeEngine()
+        let sut = QueueStore(prober: prober, engine: engine,
+                             binaries: FakeBinaries(), settings: makeEphemeralSettings(),
+                             libraryNames: { ["Lisa Ann"] })
+        prober.itemsToReturn = [DownloadItem(url: "https://x.com/a/status/1",
+                                             title: "Aggregator - lisa ann in the pool 💦 https://t.co/x",
+                                             uploader: "Aggregator", state: .ready)]
+        await sut.add(url: "https://x.com/a/status/1")
+        let id = sut.items[0].id
+        sut.startDownload(id)
+        engine.finish(id, outputPath: raw)
+
+        await waitUntil { sut.items[0].state == .completed }
+        let expected = dir.appendingPathComponent("Lisa Ann_in the pool.mp4")
+        XCTAssertEqual(sut.items[0].outputPath, expected)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: expected.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: raw.path))
     }
 
     func test_pause_preventsPromotionOnStartAll() async {

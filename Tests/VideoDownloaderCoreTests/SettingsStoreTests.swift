@@ -58,4 +58,17 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(second.defaultFormat, .audio(.best))
         XCTAssertTrue(second.embedThumbnailAndMetadata)
     }
+
+    func test_performerLibrary_defaultsAndPersists() {
+        let defaults = ephemeralDefaults()
+        let first = SettingsStore(defaults: defaults)
+        XCTAssertEqual(first.performerLibrary.path, FileNamer.defaultLibraryPath)
+        XCTAssertEqual(first.performerExclusions, ["Compilations", "Telegram"])
+
+        first.performerLibrary = URL(fileURLWithPath: "/Volumes/Other/Attrici", isDirectory: true)
+        first.performerExclusions = ["Misc"]
+        let second = SettingsStore(defaults: defaults)
+        XCTAssertEqual(second.performerLibrary.path, "/Volumes/Other/Attrici")
+        XCTAssertEqual(second.performerExclusions, ["Misc"])
+    }
 }

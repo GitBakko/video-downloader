@@ -24,9 +24,20 @@ struct RootView: View {
         .task {
             if app.setupPhase != .ready { await app.bootstrap() }
         }
+        .alert("Disco degli attori non trovato", isPresented: Binding(
+            get: { app.performerLibraryMissing },
+            set: { app.performerLibraryMissing = $0 }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("“\(app.settings.performerLibrary.path)” non è disponibile: collega il disco per dare ai file "
+                 + "il nome dell'attrice corretto. Finché manca, il nome viene preso dai metadati "
+                 + "o dal testo del post, altrimenti “\(FileNamer.fallbackPerformer)”.")
+        }
         // Offer to resume/delete downloads a previous session left unfinished.
+        // Held back while the disk alert is up: two modals at once don't stack.
         .sheet(isPresented: Binding(
-            get: { !app.recovery.isEmpty },
+            get: { !app.recovery.isEmpty && !app.performerLibraryMissing },
             set: { if !$0 { app.dismissRecovery() } }
         )) {
             RecoveryView()

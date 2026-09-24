@@ -8,7 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **Nomi dei file leggibili, con l'attrice in testa.** A download finito il file
+  viene rinominato in `<Attrice>_<titolo pulito>.<ext>`. Il nome viene cercato
+  tra le cartelle di `/Volumes/Disco dati 3/cartella senza nome/`: prima nel
+  `cast` dei metadati, poi nel testo del post (su X il nome è quasi sempre scritto
+  nel tweet, non è l'autore né una menzione). In mancanza si usano il primo nome
+  del cast, un nome di persona riconosciuto nel testo, oppure `vario`. Il titolo
+  perde emoji, link, hashtag, @menzioni, `[id]` e codici alfanumerici; gli accenti
+  diventano ASCII e gli spazi restano. Nessun file viene sovrascritto (`_2`, `_3`…).
+  Se il disco non è collegato all'avvio compare un avviso. Cartella attrici e
+  cartelle da ignorare (default `Compilations`, `Telegram`) si impostano in
+  Impostazioni → Nomi dei file. Gli hashtag contano come nomi (`#PetaJensen`).
+- **Rinomina dei file già scaricati.** In Impostazioni → Nomi dei file,
+  “Rinomina…” applica lo stesso schema ai file della destinazione che hanno
+  ancora il nome originale `Titolo [id]`, rileggendo i metadati dal link salvato
+  in cronologia (o dal nome del file se il post non è più raggiungibile), e
+  ritenta i file `vario_…`, rinominandoli solo se ora trova un nome. Cronologia
+  e lista seguono i nuovi nomi. Bloccato mentre un download è in corso.
 
 ## [1.5.0] - 2026-08-01
 

@@ -39,6 +39,9 @@ public enum MediaProbeParser {
             duration: info.duration,
             source: info.extractorKey,
             mediaID: info.id,
+            description: info.description,
+            uploader: info.uploader,
+            cast: info.cast ?? [],
             availableFormats: (info.formats ?? []).map(mapFormat),
             selectedFormat: .video(.best),   // neutral default; QueueStore.add applies the real default
             state: .ready,

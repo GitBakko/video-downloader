@@ -20,6 +20,7 @@ final class AppModel {
     let queue: QueueStore
     /// Persistent log of successful downloads, shown in the Cronologia window.
     let history: HistoryStore
+    private let prober: MediaProbe
 
     // UI state
     var setupPhase: SetupPhase = .installing("Verifica dei componenti…")
@@ -36,6 +37,11 @@ final class AppModel {
     /// Set when the destination folder can't be written to, surfaced above the
     /// queue so a start doesn't fail later with a raw yt-dlp errno (P16).
     var destinationError: String?
+    /// True when the performer-folder disk used to name files isn't mounted at
+    /// launch; drives a one-time alert (files then fall back to cast/tweet/"vario").
+    var performerLibraryMissing = false
+    /// `(done, total)` while "Rinomina file già scaricati" runs; nil otherwise.
+    var renameProgress: (done: Int, total: Int)?
     /// Guards against a rapid double-tap of "Riprova" spawning two bootstraps (S15).
     private var bootstrapping = false
     private var lastClipboardSuggestion: String?
@@ -48,6 +54,7 @@ final class AppModel {
         let engine = DownloadEngine(binaries: binaries)
         self.settings = settings
         self.binaries = binaries
+        self.prober = prober
         // The queue persists its whole list to `queue.json` and restores it here,
         // so closing the app and reopening brings the same rows back.
         self.queue = QueueStore(prober: prober, engine: engine, binaries: binaries,
@@ -78,6 +85,7 @@ final class AppModel {
             })
             setupProgress = nil
             setupPhase = .ready
+            performerLibraryMissing = !FileManager.default.fileExists(atPath: settings.performerLibrary.path)
             // Surface any downloads interrupted by a previous quit/crash (leftover
             // `.part` files) so the user can resume or delete them.
             buildRecovery()
@@ -322,6 +330,44 @@ final class AppModel {
             urlField = candidate
             lastClipboardSuggestion = candidate
             showToast("Link catturato dagli appunti")
+        }
+    }
+
+    // MARK: Rename files downloaded before automatic naming
+
+    /// Files in the destination still named `Title [id].ext`.
+    func renameCandidates() -> [ExistingFileRenamer.Candidate] {
+        ExistingFileRenamer.candidates(in: settings.destination)
+    }
+
+    /// True while a download could still be writing intermediate files into the
+    /// destination, which the bulk rename must not race with.
+    var hasActiveDownloads: Bool {
+        queue.items.contains { $0.state == .downloading || $0.state == .processing }
+    }
+
+    func renameExistingFiles() {
+        guard renameProgress == nil, !hasActiveDownloads else { return }
+        let candidates = renameCandidates()
+        guard !candidates.isEmpty else { showToast("Nessun file da rinominare"); return }
+        renameProgress = (0, candidates.count)
+        // Most recent record wins if the same path was downloaded twice.
+        var urlByPath: [String: String] = [:]
+        for entry in history.entries.reversed() {
+            if let path = entry.outputPath { urlByPath[path] = entry.url }
+        }
+        Task {
+            let renames = await ExistingFileRenamer.renameAll(
+                candidates, library: settings.performerNames, prober: prober,
+                cookiesBrowser: settings.cookiesBrowser,
+                urlFor: { urlByPath[$0.path] },
+                onProgress: { [weak self] done, total in self?.renameProgress = (done, total) })
+            for rename in renames {
+                history.relocateOutput(from: rename.from, to: rename.to)
+                queue.relocateOutput(from: rename.from, to: rename.to)
+            }
+            renameProgress = nil
+            showToast("Rinominati \(renames.count) file su \(candidates.count)")
         }
     }
 

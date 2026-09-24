@@ -14,6 +14,11 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
     /// (`%(title)s [%(id)s].%(ext)s`), so it links a resumed/interrupted download
     /// to its leftover `.part`/`.ytdl` files on disk.
     public var mediaID: String?
+    /// Probe metadata used only to name the finished file (see `FileNamer`):
+    /// the full post text (X), the posting account, and the credited performers.
+    public var description: String?
+    public var uploader: String?
+    public var cast: [String]
     public var availableFormats: [MediaFormat]
     public var selectedFormat: FormatChoice
     public var state: DownloadState
@@ -42,6 +47,9 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         duration: TimeInterval? = nil,
         source: String? = nil,
         mediaID: String? = nil,
+        description: String? = nil,
+        uploader: String? = nil,
+        cast: [String] = [],
         availableFormats: [MediaFormat] = [],
         selectedFormat: FormatChoice = .video(.best),
         state: DownloadState = .probing,
@@ -62,6 +70,9 @@ public struct DownloadItem: Identifiable, Equatable, Sendable {
         self.duration = duration
         self.source = source
         self.mediaID = mediaID
+        self.description = description
+        self.uploader = uploader
+        self.cast = cast
         self.availableFormats = availableFormats
         self.selectedFormat = selectedFormat
         self.state = state

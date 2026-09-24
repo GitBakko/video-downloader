@@ -24,9 +24,16 @@ public struct QueueSnapshotItem: Codable, Equatable, Sendable {
     public var addedAt: Date
     /// Optional, so a `queue.json` written before this field existed still decodes.
     public var playlistIndex: Int?
+    /// Naming metadata (see `FileNamer`); optional for older snapshots.
+    public var description: String?
+    public var uploader: String?
+    public var cast: [String]?
 
     public init(item: DownloadItem) {
         playlistIndex = item.playlistIndex
+        description = item.description
+        uploader = item.uploader
+        cast = item.cast.isEmpty ? nil : item.cast
         id = item.id
         url = item.url
         title = item.title
@@ -53,6 +60,9 @@ public struct QueueSnapshotItem: Codable, Equatable, Sendable {
             duration: duration,
             source: source,
             mediaID: mediaID,
+            description: description,
+            uploader: uploader,
+            cast: cast ?? [],
             availableFormats: [],
             selectedFormat: SettingsStore.decode(formatToken) ?? .video(.best),
             state: state.restoredAcrossLaunch,

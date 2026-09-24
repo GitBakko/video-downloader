@@ -15,10 +15,13 @@ struct YtDlpInfo: Decodable {
     let formats: [YtDlpFormat]?
     let entries: [YtDlpInfo?]?
     let extractorKey: String?   // e.g. "Youtube", "Vimeo", "TikTok"
+    let description: String?    // full tweet text on X
+    let uploader: String?
+    let cast: [String]?
 
     enum CodingKeys: String, CodingKey {
         case type = "_type"
-        case id, title, duration, thumbnail, url, formats, entries
+        case id, title, duration, thumbnail, url, formats, entries, description, uploader, cast
         case webpageURL = "webpage_url"
         case extractorKey = "extractor_key"
     }

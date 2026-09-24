@@ -44,6 +44,41 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section("Nomi dei file") {
+                LabeledContent("Cartella attrici") {
+                    HStack {
+                        Text(settings.performerLibrary.path(percentEncoded: false))
+                            .lineLimit(1).truncationMode(.middle)
+                            .foregroundStyle(.secondary)
+                        Button("Cambia…") { choosePerformerLibrary() }
+                    }
+                }
+                TextField("Cartelle da ignorare", text: Binding(
+                    get: { settings.performerExclusions.joined(separator: ", ") },
+                    set: { settings.performerExclusions = $0.split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty } }
+                ))
+                Text("A download finito il file diventa “<Attrice>_<titolo>”. Il nome viene cercato tra le sottocartelle della cartella attrici (escluse quelle da ignorare, separate da virgola), poi nei metadati e nel testo del post; altrimenti “vario”.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                LabeledContent("File già scaricati") {
+                    HStack(spacing: 8) {
+                        if let progress = app.renameProgress {
+                            ProgressView().controlSize(.small)
+                            Text("\(progress.done)/\(progress.total)").foregroundStyle(.secondary)
+                        }
+                        Button("Rinomina…") { confirmingRename = true }
+                            .disabled(app.renameProgress != nil || app.hasActiveDownloads)
+                    }
+                }
+                Text("Rinomina i file della destinazione che hanno ancora il nome originale (“Titolo [id]”), rileggendo i metadati dal link salvato in cronologia. Disponibile quando nessun download è in corso.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section("Extra") {
                 Toggle("Incorpora copertina e metadati", isOn: $settings.embedThumbnailAndMetadata)
             }
@@ -83,6 +118,32 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .confirmationDialog(renameTitle, isPresented: $confirmingRename) {
+            Button("Rinomina") { app.renameExistingFiles() }
+            Button("Annulla", role: .cancel) {}
+        } message: {
+            Text("I file vengono rinominati sul disco. Quelli già rinominati non vengono toccati.")
+        }
+    }
+
+    @State private var confirmingRename = false
+
+    private var renameTitle: String {
+        let count = app.renameCandidates().count
+        return count == 0 ? "Nessun file da rinominare" : "Rinominare \(count) file in “\(app.settings.destination.lastPathComponent)”?"
+    }
+
+    private func choosePerformerLibrary() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = app.settings.performerLibrary
+        panel.prompt = "Scegli"
+        if panel.runModal() == .OK, let url = panel.url {
+            app.settings.performerLibrary = url
+            app.performerLibraryMissing = false
+        }
     }
 
     private func chooseDestination() {

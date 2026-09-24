@@ -42,6 +42,16 @@ public final class HistoryStore {
         persist()
     }
 
+    /// Follow a file renamed after the fact (see `ExistingFileRenamer`).
+    public func relocateOutput(from old: URL, to new: URL) {
+        var changed = false
+        for i in entries.indices where entries[i].outputPath == old.path {
+            entries[i].outputPath = new.path
+            changed = true
+        }
+        if changed { persist() }
+    }
+
     public func remove(_ id: UUID) {
         entries.removeAll { $0.id == id }
         persist()

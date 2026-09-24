@@ -41,6 +41,22 @@ public final class SettingsStore {
         didSet { defaults.set(cookiesBrowser, forKey: Keys.cookiesBrowser) }
     }
 
+    /// Folder holding one sub-folder per performer; its names prefix finished
+    /// files (see `FileNamer`). Usually on an external disk that may be unmounted.
+    public var performerLibrary: URL {
+        didSet { defaults.set(performerLibrary.path, forKey: Keys.performerLibrary) }
+    }
+    /// Library sub-folders that aren't performers (e.g. "Compilations") and must
+    /// never become a filename prefix. Matched case-insensitively.
+    public var performerExclusions: [String] {
+        didSet { defaults.set(performerExclusions, forKey: Keys.performerExclusions) }
+    }
+
+    /// Performer names currently available for naming (empty when unmounted).
+    public var performerNames: [String] {
+        FileNamer.libraryNames(at: performerLibrary.path, excluding: performerExclusions)
+    }
+
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         if let path = defaults.string(forKey: Keys.destination) {
@@ -54,6 +70,10 @@ public final class SettingsStore {
         maxConcurrentDownloads = max(1, defaults.object(forKey: Keys.maxConcurrent) as? Int ?? 2)
         maxConcurrentPerSource = max(1, defaults.object(forKey: Keys.maxPerSource) as? Int ?? 2)
         cookiesBrowser = CookieBrowser.normalize(defaults.string(forKey: Keys.cookiesBrowser))
+        performerLibrary = URL(fileURLWithPath: defaults.string(forKey: Keys.performerLibrary)
+                               ?? FileNamer.defaultLibraryPath, isDirectory: true)
+        performerExclusions = defaults.stringArray(forKey: Keys.performerExclusions)
+            ?? FileNamer.defaultExclusions
     }
 
     /// The value consumed by Phase 6's `QueueStore` / `ArgumentBuilder` (Task 1b.3 type).
@@ -77,6 +97,8 @@ public final class SettingsStore {
         static let maxConcurrent = "settings.maxConcurrentDownloads"
         static let maxPerSource = "settings.maxConcurrentPerSource"
         static let cookiesBrowser = "settings.cookiesBrowser"
+        static let performerLibrary = "settings.performerLibrary"
+        static let performerExclusions = "settings.performerExclusions"
     }
 
     // MARK: - FormatChoice <-> String (FormatChoice is not Codable)
